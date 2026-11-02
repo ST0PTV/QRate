@@ -23,7 +23,7 @@ Unter **Authentication**:
 
 1. **Sign In / Providers → Email:** aktiviert lassen.
 2. **URL Configuration:**
-   - *Site URL:* die App-Adresse, z. B. `https://st0ptv.github.io/qrate/`
+   - *Site URL:* die App-Adresse, z. B. `https://st0ptv.github.io/QRate/`
    - *Redirect URLs:* dieselbe Adresse und für lokale Tests `http://localhost:8787/`
 3. **Emails → Templates → Magic Link:** den Code in die Mail aufnehmen, damit die Anmeldung auch in der installierten Homescreen-App funktioniert. Zum Beispiel:
 
@@ -44,7 +44,7 @@ Unter **Project Settings → API** stehen *Project URL* und der öffentliche Sch
 ```js
 SUPABASE_URL: 'https://xxxx.supabase.co',
 SUPABASE_ANON_KEY: '…',
-APP_URL: 'https://st0ptv.github.io/qrate/'
+APP_URL: 'https://st0ptv.github.io/QRate/'
 ```
 
 Der öffentliche Schlüssel darf ins Repo, er ist für Browser gedacht. Geschützt sind die Daten über die Policies aus Schritt 2. Den *service_role*- bzw. *secret*-Schlüssel nie eintragen.
@@ -53,7 +53,7 @@ Der öffentliche Schlüssel darf ins Repo, er ist für Browser gedacht. Geschüt
 
 ## 5. Veröffentlichen
 
-1. Repo auf GitHub anlegen (z. B. `qrate`) und pushen.
+1. Repo auf GitHub anlegen (z. B. `QRate`) und pushen.
 2. **Settings → Pages:** Branch `main`, Ordner `/ (root)`.
 3. Nach ein bis zwei Minuten ist die App unter `APP_URL` erreichbar.
 
