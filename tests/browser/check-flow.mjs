@@ -191,7 +191,7 @@ try {
   await page.fill('#displayName', 'Fremd');
   await page.getByRole('button', { name: 'Haushalt gründen' }).click();
   // Nach dem Gründen öffnet die App das vorher gescannte Etikett – es gehört Alex, also kein Zugriff
-  await page.getByRole('heading', { name: 'Kein Zugriff' }).waitFor();
+  await page.locator('#main').getByRole('heading', { name: 'Kein Zugriff' }).waitFor();
   await shot(page, 'kein-zugriff');
   check(!(await page.getByText('Weihnachtsdeko').count()), 'Fremder sieht keinen Kistennamen');
 
