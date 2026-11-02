@@ -98,9 +98,11 @@ code, .mono { font-family: var(--mono); font-size: .9em; }
 .card { background: var(--surface); border-radius: var(--radius); padding: 16px; }
 .card.stack { gap: 12px; }
 .card-title { margin-bottom: 6px; }
-.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .card.empty { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 16px; }
-.sub { margin: 14px 4px -6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.sub { margin: 14px 4px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+#main > .sub { margin: 4px 4px -8px; }
+.card .sub { margin: 16px 0 6px; }
 /* Buttons: Kapseln. Hauptaktion in der Akzentfarbe, sonst getönt (iOS „tinted“) */
 .btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 0 20px; border-radius: 999px; border: 0; background: var(--tint-bg); color: var(--accent); font-size: 17px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .btn:active { opacity: .7; }
@@ -114,10 +116,12 @@ code, .mono { font-family: var(--mono); font-size: .9em; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .icon-btn { display: inline-grid; place-items: center; width: var(--tap-s); height: var(--tap-s); border-radius: 50%; border: 0; background: var(--fill); color: var(--accent); cursor: pointer; flex: none; }
 .icon-btn:active { opacity: .7; }
-.link-btn { border: 0; background: none; color: var(--accent); padding: 10px 0 0; cursor: pointer; font-size: 15px; }
+.link-btn { border: 0; background: none; color: var(--accent); padding: 0; margin-top: 10px; min-height: var(--tap-s); cursor: pointer; font-size: 15px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
 .field > span:first-child { margin-left: 4px; }
-.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 10px; }
+/* Felder einer Reihe fluchten unten, auch wenn ein Label zweizeilig umbricht */
+.field-row .field { justify-content: flex-end; }
 .input { width: 100%; min-width: 0; min-height: var(--tap); background: var(--fill); border: 1px solid transparent; border-radius: 12px; padding: 10px 14px; color: var(--text); font-size: 17px; }
 .input:focus { border-color: var(--accent); outline: none; }
 .input::placeholder { color: var(--faint); }

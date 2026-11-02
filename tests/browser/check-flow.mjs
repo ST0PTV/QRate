@@ -6,6 +6,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { serve } from '../../scripts/serve.mjs';
+import { auditSpacing, auditFields } from './spacing.mjs';
 
 const SHOTS = process.argv[2] || join(tmpdir(), 'qrate-shots');
 mkdirSync(SHOTS, { recursive: true });
@@ -53,6 +54,8 @@ async function shot(page, name) {
   const file = join(SHOTS, `${String(++step).padStart(2, '0')}-${name}.png`);
   await page.screenshot({ path: file, fullPage: true });
   console.log(`  ${name}`);
+  // Abstände und Felder nach den Regeln aus The Tracker
+  for (const x of [...await auditSpacing(page, name), ...await auditFields(page, name)]) check(false, x);
 }
 
 const codes = async page => page.evaluate(() => window.__mockCodes);
@@ -84,6 +87,15 @@ try {
   await page.getByRole('button', { name: 'Hinzufügen', exact: true }).last().click();
   await page.locator('.item-name', { hasText: 'Kabelbinder' }).waitFor();
   await shot(page, 'kiste-hinzugefuegt');
+
+  // Gegenstand bearbeiten und Kiste umbenennen: nur Ansicht für die Feld-Prüfung, dann abbrechen
+  await page.locator('[data-v^="edit:"]').first().click();
+  await page.locator('#ename').waitFor();
+  await shot(page, 'gegenstand-bearbeiten');
+  await page.getByRole('button', { name: 'Umbenennen' }).click();
+  await page.locator('#boxName').waitFor();
+  await shot(page, 'kiste-umbenennen');
+  await page.getByRole('button', { name: 'Abbrechen' }).click();
 
   await page.locator('[data-act="take"][data-name="Klinkenkabel"]').click();
   await page.locator('#toast', { hasText: 'Klinkenkabel“ entnommen' }).waitFor();
@@ -187,6 +199,7 @@ try {
   console.log('Fremd');
   page = await newPage('fremd', `&k=${c.k[0]}`);
   await page.getByRole('heading', { name: 'Haushalt gründen' }).waitFor();
+  await shot(page, 'haushalt-gruenden');
   await page.fill('#hhName', 'Andere Wohnung');
   await page.fill('#displayName', 'Fremd');
   await page.getByRole('button', { name: 'Haushalt gründen' }).click();
