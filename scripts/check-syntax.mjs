@@ -22,7 +22,7 @@ for (const f of shipped) {
   if (!listed.has(f)) { failed = true; console.error(`Fehlt in PRECACHE von sw.js: ${f}`); }
 }
 for (const f of listed) {
-  if (f.includes('/') && !f.startsWith('kw-') && f !== './' && !shipped.includes(f)) { failed = true; console.error(`In PRECACHE, aber nicht vorhanden: ${f}`); }
+  if (f.includes('/') && !f.startsWith('qr-') && f !== './' && !shipped.includes(f)) { failed = true; console.error(`In PRECACHE, aber nicht vorhanden: ${f}`); }
 }
 
 if (failed) process.exit(1);

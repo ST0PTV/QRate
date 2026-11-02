@@ -15,8 +15,8 @@ const USERS = {
 
 // window.location: "location" ist unten eine exportierte Funktion
 const param = new URL(window.location.href).searchParams.get('as');
-if (param) sessionStorage.setItem('kw_mock_user', param);
-let current = sessionStorage.getItem('kw_mock_user') ?? 'alex';
+if (param) sessionStorage.setItem('qr_mock_user', param);
+let current = sessionStorage.getItem('qr_mock_user') ?? 'alex';
 if (current === 'none') current = null;
 const authListeners = [];
 
@@ -25,8 +25,8 @@ const authListeners = [];
 let db;
 export const ready = (async () => {
   const reset = new URL(window.location.href).searchParams.has('reset');
-  if (reset) await new Promise(ok => { const r = indexedDB.deleteDatabase('/pglite/kw-mock'); r.onsuccess = r.onerror = r.onblocked = ok; });
-  db = new PGlite('idb://kw-mock', { extensions: { pg_trgm } });
+  if (reset) await new Promise(ok => { const r = indexedDB.deleteDatabase('/pglite/qr-mock'); r.onsuccess = r.onerror = r.onblocked = ok; });
+  db = new PGlite('idb://qr-mock', { extensions: { pg_trgm } });
   const exists = (await db.query(`select to_regclass('public.boxes') as t`)).rows[0].t;
   if (!exists) {
     await db.exec(AUTH_STUB);
@@ -107,11 +107,11 @@ export const auth = {
     const key = Object.keys(USERS).find(k => USERS[k].email === email) ?? 'neu';
     if (!key) throw new Error('Token has expired or is invalid');
     current = key;
-    sessionStorage.setItem('kw_mock_user', key);
+    sessionStorage.setItem('qr_mock_user', key);
   },
   async signOut() {
     current = null;
-    sessionStorage.setItem('kw_mock_user', 'none');
+    sessionStorage.setItem('qr_mock_user', 'none');
     for (const cb of authListeners) cb('SIGNED_OUT', null);
   }
 };

@@ -1,6 +1,6 @@
 {
-  "name": "Kistenwerk",
-  "short_name": "Kistenwerk",
+  "name": "QRate",
+  "short_name": "QRate",
   "description": "QR-Etiketten für Kisten: scannen und sehen, was drin ist.",
   "lang": "de",
   "start_url": "./",

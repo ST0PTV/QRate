@@ -1,8 +1,8 @@
 {
-  "name": "kistenwerk",
+  "name": "qrate",
   "private": true,
   "type": "module",
-  "description": "Kistenwerk PWA – package.json nur für Tests und Prüfskripte, kein Build-Schritt.",
+  "description": "QRate PWA – package.json nur für Tests und Prüfskripte, kein Build-Schritt.",
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.js",

@@ -4,7 +4,7 @@ export const CONFIG = {
   SUPABASE_URL: '',
   SUPABASE_ANON_KEY: '',
   // Adresse, die in jeden QR-Code gedruckt wird. Vor dem ersten Etikettendruck festlegen und danach nicht mehr ändern.
-  APP_URL: 'https://st0ptv.github.io/kistenwerk/'
+  APP_URL: 'https://st0ptv.github.io/qrate/'
 };
 
 export const isConfigured = () => Boolean(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);

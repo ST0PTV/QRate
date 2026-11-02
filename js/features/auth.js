@@ -6,7 +6,7 @@ import { esc, icon, toast } from '../core/ui.js';
 export const setupView = {
   id: 'setup',
   render(ctx) {
-    ctx.setTitle('Kistenwerk', 'Einrichtung');
+    ctx.setTitle('QRate', 'Einrichtung');
     return `<div class="card stack">
       <h2>Noch nicht eingerichtet</h2>
       <p class="muted">In <code>js/core/config.js</code> fehlen Adresse und öffentlicher Schlüssel des Supabase-Projekts.
@@ -25,7 +25,7 @@ function redirectUrl() {
 export const loginView = {
   id: 'login',
   render(ctx) {
-    ctx.setTitle('Kistenwerk', 'Anmelden');
+    ctx.setTitle('QRate', 'Anmelden');
     const pending = store.pendingCode() || store.pendingInvite();
     if (sentTo) {
       return `<form class="card stack" data-form="verify">
@@ -39,7 +39,7 @@ export const loginView = {
     }
     return `<form class="card stack" data-form="send">
       <div class="lock-ico">${icon('lock')}</div>
-      <h2>${pending ? 'Privates Etikett' : 'Willkommen bei Kistenwerk'}</h2>
+      <h2>${pending ? 'Privates Etikett' : 'Willkommen bei QRate'}</h2>
       <p class="muted">${pending
         ? 'Dieses Etikett gehört zu einem privaten Haushalt. Melde dich an, um den Inhalt zu sehen.'
         : 'Melde dich mit deiner E-Mail-Adresse an. Du bekommst einen Code, ein Passwort brauchst du nicht.'}</p>
@@ -75,7 +75,7 @@ export const onboardingView = {
   id: 'onboarding',
   render(ctx) {
     const invite = store.pendingInvite();
-    ctx.setTitle('Kistenwerk', invite ? 'Einladung' : 'Haushalt');
+    ctx.setTitle('QRate', invite ? 'Einladung' : 'Haushalt');
     if (invite) {
       return `<form class="card stack" data-form="join">
         <h2>Einladung annehmen</h2>
@@ -133,7 +133,7 @@ export const onboardingView = {
 export const pendingView = {
   id: 'pending',
   render(ctx) {
-    ctx.setTitle('Kistenwerk', 'Wartet');
+    ctx.setTitle('QRate', 'Wartet');
     const names = ctx.app.memberships.map(m => esc(m.households?.name ?? 'Haushalt')).join(', ');
     return `<div class="card stack">
       <h2>Fast geschafft</h2>

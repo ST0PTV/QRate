@@ -1,6 +1,6 @@
 // Offline-Cache für die App-Hülle. Daten von Supabase (anderer Ursprung) gehen nie durch den Cache.
 // Neue Datei → hier eintragen und CACHE_VERSION erhöhen (npm run check prüft das).
-const CACHE_VERSION = 'kw-0.1.0-1';
+const CACHE_VERSION = 'qr-0.1.0-1';
 const PRECACHE = [
   './',
   'index.html',
@@ -37,7 +37,7 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k.startsWith('kw-') && k !== CACHE_VERSION).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys.filter(k => k.startsWith('qr-') && k !== CACHE_VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

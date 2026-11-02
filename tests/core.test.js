@@ -16,8 +16,8 @@ test('cleanCode: Crockford-Verwechsler', () => {
 });
 
 test('parseLabelInput: Adresse, Code, Nummer, Unsinn', () => {
-  const url = labelUrl('https://st0ptv.github.io/kistenwerk/', '7KX2M9QD');
-  assert.equal(url, 'https://st0ptv.github.io/kistenwerk/?k=7KX2M9QD');
+  const url = labelUrl('https://st0ptv.github.io/qrate/', '7KX2M9QD');
+  assert.equal(url, 'https://st0ptv.github.io/qrate/?k=7KX2M9QD');
   assert.deepEqual(parseLabelInput(url), { code: '7KX2M9QD' });
   assert.deepEqual(parseLabelInput(' 7kx2m9qd '), { code: '7KX2M9QD' });
   assert.deepEqual(parseLabelInput('K-0003'), { kind: 'K', number: 3 });

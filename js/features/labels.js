@@ -85,7 +85,7 @@ export const printView = {
     for (let i = 0; i < cells.length; i += PER_SHEET) sheets.push(cells.slice(i, i + PER_SHEET));
     const cell = l => l ? `<div class="plabel">
         <div class="pqr">${qrSvg(labelUrl(CONFIG.APP_URL, l.code))}</div>
-        <div class="ptext"><div class="pnum">${humanNumber(l.kind, l.number)}</div><div class="pcode">${l.code}</div><div class="papp">Kistenwerk</div></div>
+        <div class="ptext"><div class="pnum">${humanNumber(l.kind, l.number)}</div><div class="pcode">${l.code}</div><div class="papp">QRate</div></div>
       </div>` : '<div class="plabel empty"></div>';
     return `
       <form class="card stack no-print" data-form="printSettings">

@@ -1,4 +1,4 @@
-// Kistenwerk – Start, Anmelde-Schranke und Router.
+// QRate – Start, Anmelde-Schranke und Router.
 // Interne Seiten über den Hash (#/box/…); QR-Codes kommen als ?k=CODE an, Einladungen als ?invite=TOKEN.
 import { isConfigured } from './core/config.js';
 import { initApi, auth, memberships, members, errorText, codeForNumber } from './core/api.js';

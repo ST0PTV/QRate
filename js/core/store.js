@@ -1,5 +1,5 @@
-// Einziger Zugriff auf localStorage. Präfix kw_ (alle Apps teilen sich den Ursprung st0ptv.github.io).
-const P = 'kw_';
+// Einziger Zugriff auf localStorage. Präfix qr_ (alle Apps teilen sich den Ursprung st0ptv.github.io).
+const P = 'qr_';
 const CACHE_MAX = 40;
 
 function read(key, fallback) {

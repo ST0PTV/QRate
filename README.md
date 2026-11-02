@@ -1,4 +1,4 @@
-# Kistenwerk
+# QRate
 
 QR-Etiketten für Kisten im Haushalt. Etikett scannen, Inhalt sehen. Mehrere Mitglieder pro Haushalt, jeder Eintrag zeigt, wer ihn angelegt hat.
 

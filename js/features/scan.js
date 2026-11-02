@@ -8,7 +8,7 @@ let cameraOn = false;
 
 async function handle(text, ctx) {
   if (await ctx.openLabel(text)) return;
-  toast('Das ist kein Kistenwerk-Etikett', 'error');
+  toast('Das ist kein QRate-Etikett', 'error');
 }
 
 export default {

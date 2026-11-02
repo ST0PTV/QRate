@@ -1,4 +1,4 @@
--- Kistenwerk – Schema 1
+-- QRate – Schema 1
 -- Alles hängt an household_id. Lesen und Schreiben regelt Row-Level-Security über my_households().
 -- Funktionen mit "security definer" prüfen die Mitgliedschaft selbst, weil sie RLS umgehen.
 

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { serve } from '../../scripts/serve.mjs';
 
-const SHOTS = process.argv[2] || join(tmpdir(), 'kistenwerk-shots');
+const SHOTS = process.argv[2] || join(tmpdir(), 'qrate-shots');
 mkdirSync(SHOTS, { recursive: true });
 const PORT = 8800 + Math.floor(Math.random() * 100);
 const server = await serve(PORT, { mock: true });

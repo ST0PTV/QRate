@@ -1,4 +1,4 @@
--- Kistenwerk – Funktionen für die App (RPC)
+-- QRate – Funktionen für die App (RPC)
 -- Alle sind "security definer" und prüfen Anmeldung und Mitgliedschaft selbst.
 -- Fehlermeldungen beginnen mit einem festen Kürzel, das die App übersetzt.
 
