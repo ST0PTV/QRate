@@ -1,0 +1,22 @@
+{
+  "name": "kistenwerk",
+  "private": true,
+  "type": "module",
+  "description": "Kistenwerk PWA – package.json nur für Tests und Prüfskripte, kein Build-Schritt.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check-syntax.mjs",
+    "privacy": "sh scripts/privacy-scan.sh",
+    "vendor": "node scripts/vendor.mjs",
+    "test:browser": "node tests/browser/check-flow.mjs",
+    "serve": "node scripts/serve.mjs",
+    "mock": "node scripts/serve.mjs --mock",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14",
+    "@supabase/supabase-js": "^2.118.0",
+    "qrcode-generator": "^2.0.4"
+  }
+}

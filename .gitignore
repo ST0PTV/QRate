@@ -1,0 +1,10 @@
+# Persönliche Daten dürfen nie ins öffentliche Repo
+*backup*.json
+*export*.json
+.privacy-terms.local
+
+# Sonstiges
+node_modules/
+.DS_Store
+*.log
+*.tmp.mjs
