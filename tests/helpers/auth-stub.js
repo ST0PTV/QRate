@@ -26,4 +26,4 @@ export const AUTH_GRANTS = `
   grant execute on function storage.foldername(text) to authenticated;
 `;
 
-export const MIGRATIONS = ['0001_schema.sql', '0002_functions.sql', '0003_photos.sql'];
+export const MIGRATIONS = ['0001_schema.sql', '0002_functions.sql', '0003_photos.sql', '0004_item_photos.sql'];

@@ -190,3 +190,43 @@ test('Fotos: Mitglied lädt hoch, Fremder sieht und schreibt nichts, höchstens 
   // Mitglied darf löschen
   assert.equal((await as(db, alex, ({ q }) => q('delete from public.box_photos where path = $1 returning id', [path(8)]))).length, 1);
 });
+
+test('Gegenstandsfoto: eins pro Gegenstand, Fremder sieht und schreibt nichts', async () => {
+  const [label] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'K', p_count: 1 }));
+  const box = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: label.code, p_name: 'Taschen' }))[0].claim_label);
+  const [item] = await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name) values ($1, 'Reisetasche') returning id`, [box.id]));
+  const path = n => `${house}/${box.id}/items/${n}.png`;
+  const upload = (user, p) => as(db, user, ({ q }) => q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [p]));
+  const addRow = (user, p, itemId = item.id) =>
+    as(db, user, ({ q }) => q('insert into public.item_photos (item_id, path) values ($1, $2) returning household_id, box_id, created_by, cutout', [itemId, p]));
+
+  await upload(alex, path(1));
+  const [row] = await addRow(alex, path(1));
+  assert.equal(row.household_id, house);
+  assert.equal(row.box_id, box.id);
+  assert.equal(row.created_by, alex);
+  assert.equal(row.cutout, true);
+
+  // Nur ein Foto pro Gegenstand
+  await rejects(addRow(alex, path(2)), 'duplicate key');
+
+  // Pfad muss unter <haushalt>/<kiste>/items/ liegen
+  const [other] = await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name) values ($1, 'Rucksack') returning id`, [box.id]));
+  await rejects(addRow(alex, `${house}/${box.id}/3.png`, other.id), 'Foto-Pfad');
+
+  // Fremder: keine Zeilen, kein Eintrag für fremde Gegenstände, kein Löschen
+  assert.equal((await as(db, fremd, ({ q }) => q('select * from public.item_photos'))).length, 0);
+  await rejects(addRow(fremd, path('fremd'), other.id), 'row-level security');
+  assert.equal((await as(db, fremd, ({ q }) => q('delete from public.item_photos returning id'))).length, 0);
+
+  // Nicht angemeldet: Tabelle gar nicht erreichbar
+  await rejects(as(db, null, ({ q }) => q('select * from public.item_photos')), 'permission denied');
+
+  // Bucket nimmt jetzt auch PNG
+  const [bucket] = (await db.query(`select allowed_mime_types from storage.buckets where id = 'box-photos'`)).rows;
+  assert.deepEqual(bucket.allowed_mime_types, ['image/jpeg', 'image/png']);
+
+  // Mitglied ersetzt: altes löschen, neues eintragen
+  assert.equal((await as(db, robin, ({ q }) => q('delete from public.item_photos where item_id = $1 returning id', [item.id]))).length, 1);
+  await addRow(robin, path(2));
+});

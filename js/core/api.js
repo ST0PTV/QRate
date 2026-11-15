@@ -117,6 +117,32 @@ export async function deletePhoto(photo) {
   await run(sb.from('box_photos').delete().eq('id', photo.id));
   await sb.storage.from(PHOTOS).remove([photo.path]);
 }
+// ---------- Gegenstandsfotos (gleicher Bucket, Pfad <haushalt>/<kiste>/items/<zufall>.png|.jpg) ----------
+export async function itemPhotos(boxId) {
+  const rows = await run(sb.from('item_photos').select('id, item_id, path, cutout, created_by, created_at').eq('box_id', boxId));
+  if (!rows.length) return [];
+  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(rows.map(r => r.path), 3600));
+  const url = new Map(signed.map(s => [s.path, s.signedUrl]));
+  return rows.map(r => ({ ...r, url: url.get(r.path) }));
+}
+// Ein Foto pro Gegenstand: neues hochladen, altes Eintrag und Datei entfernen, neuen Eintrag anlegen.
+export async function setItemPhoto(householdId, boxId, itemId, blob, cutout) {
+  const png = blob.type === 'image/png';
+  const path = `${householdId}/${boxId}/items/${crypto.randomUUID()}.${png ? 'png' : 'jpg'}`;
+  await run(sb.storage.from(PHOTOS).upload(path, blob, { contentType: png ? 'image/png' : 'image/jpeg' }));
+  try {
+    const old = await run(sb.from('item_photos').delete().eq('item_id', itemId).select('path'));
+    await run(sb.from('item_photos').insert({ item_id: itemId, path, cutout }));
+    if (old.length) await sb.storage.from(PHOTOS).remove(old.map(o => o.path));
+  } catch (e) {
+    await sb.storage.from(PHOTOS).remove([path]);
+    throw e;
+  }
+}
+export async function deleteItemPhoto(photo) {
+  await run(sb.from('item_photos').delete().eq('id', photo.id));
+  await sb.storage.from(PHOTOS).remove([photo.path]);
+}
 export const moveBox = (id, locationId) => run(sb.from('boxes').update({ location_id: locationId }).eq('id', id));
 
 // ---------- Orte ----------

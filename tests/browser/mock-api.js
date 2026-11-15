@@ -205,6 +205,27 @@ export async function deletePhoto(photo) {
   await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
 }
 
+export async function itemPhotos(boxId) {
+  const rows = await q('select id, item_id, path, cutout, created_by, created_at from public.item_photos where box_id = $1', [boxId]);
+  const visible = new Set((await q(`select name from storage.objects where bucket_id = 'box-photos'`)).map(r => r.name));
+  return rows.map(r => ({ ...r, url: visible.has(r.path) ? (photoBlobs.get(r.path) ?? PHOTO_MISSING) : null }));
+}
+export async function setItemPhoto(householdId, boxId, itemId, blob, cutout) {
+  await ready;
+  const path = `${householdId}/${boxId}/items/${crypto.randomUUID()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
+  await as(current, async t => {
+    await t.q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [path]);
+    const old = await t.q('delete from public.item_photos where item_id = $1 returning path', [itemId]);
+    await t.q('insert into public.item_photos (item_id, path, cutout) values ($1, $2, $3)', [itemId, path, cutout]);
+    for (const o of old) await t.q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [o.path]);
+  });
+  photoBlobs.set(path, URL.createObjectURL(blob));
+}
+export async function deleteItemPhoto(photo) {
+  await q('delete from public.item_photos where id = $1', [photo.id]);
+  await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
+}
+
 export async function location(id) {
   const [loc, boxes] = await Promise.all([
     one(`select o.id, o.name, o.label_code, case when l.code is null then null else json_build_object('number', l.number) end as labels

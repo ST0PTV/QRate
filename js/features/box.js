@@ -5,16 +5,18 @@ import { parseQuick } from '../core/parse.js';
 import { humanNumber } from '../core/code.js';
 import { esc, icon, tag, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { errorText } from '../core/errors.js';
-import { shrinkImage } from '../core/photo.js';
+import { shrinkImage, shrinkCutout, clipboardImage } from '../core/photo.js';
 import { boxRow } from './home.js';
 
 // Zustand der geöffneten Kiste (Panels, nachgeladene Listen)
-const st = { boxId: null, code: null, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null };
+const st = { boxId: null, code: null, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null,
+  itemPhotos: null, shot: null, picArmed: false, picMsg: '' };
 const MAX_PHOTOS = 8;
 
 function resetFor(boxId) {
   if (st.boxId === boxId) return;
-  Object.assign(st, { boxId, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null });
+  Object.assign(st, { boxId, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null, itemPhotos: null });
+  clearShot();
 }
 
 // ---------- Darstellung ----------
@@ -29,8 +31,10 @@ function itemHtml(it) {
       <button class="btn ghost small" type="button" data-act="panel" data-v="">Abbrechen</button></div>
     </form>`;
   }
+  if (st.panel === 'pic:' + it.id) return `<div class="item item-pic-panel" id="itemPic" data-id="${it.id}">${picPanelHtml(it)}</div>`;
   return `<div class="item">
     <span class="qty">${it.qty}×</span>
+    ${picBtnHtml(it)}
     <div class="grow">
       <div class="item-name">${esc(it.name)}</div>
       ${it.note ? `<div class="item-note">${esc(it.note)}</div>` : ''}
@@ -240,6 +244,161 @@ const photoChange = {
   }
 };
 
+// ---------- Foto pro Gegenstand (freigestellt mit Apples „Auswahl kopieren“) ----------
+
+const picOf = id => st.itemPhotos?.get(id) ?? null;
+
+function picBtnHtml(it) {
+  if (!st.itemPhotos) return `<span class="item-pic" data-pic="${it.id}" aria-hidden="true"></span>`;
+  const p = picOf(it.id);
+  return p
+    ? `<button class="item-pic" data-pic="${it.id}" data-act="panel" data-v="pic:${it.id}" aria-label="Foto von ${esc(it.name)} ansehen"><img src="${esc(p.url)}" alt=""></button>`
+    : `<button class="item-pic empty" data-pic="${it.id}" data-act="panel" data-v="pic:${it.id}" aria-label="Foto für ${esc(it.name)} hinzufügen">${icon('camera')}</button>`;
+}
+
+const shotInput = label => `<label class="btn">${icon('camera')} ${label}<input id="itemShot" type="file" accept="image/*" hidden></label>`;
+const pasteBtn = primary => `<button class="btn${primary ? ' primary' : ''}" data-act="picPaste">Freigestellt übernehmen</button>`;
+const pasteField = `<div class="paste-field" id="picPasteField" contenteditable="true" role="textbox" aria-label="Freigestelltes Bild hier einfügen">Oder hier tippen, lange drücken, „Einfügen“</div>`;
+
+function picPanelHtml(it) {
+  const p = picOf(it.id);
+  const head = `<div class="pic-head"><div class="grow"><div class="item-name">${esc(it.name)}</div>
+      <div class="meta">${it.qty}× · Foto</div></div>
+    <button class="icon-btn" data-act="panel" data-v="" aria-label="Schließen">${icon('close')}</button></div>`;
+  const msg = st.picMsg ? `<p class="note">${esc(st.picMsg)}</p>` : '';
+  if (st.shot) {
+    return `${head}
+      <img class="pic-shot" src="${esc(st.shot.url)}" alt="Aufgenommenes Foto von ${esc(it.name)}">
+      <ol class="pic-steps"><li><strong>Lange auf den Gegenstand drücken</strong></li><li>„Auswahl kopieren“ wählen</li><li>„Freigestellt übernehmen“ tippen</li></ol>
+      ${msg}${pasteBtn(true)}${pasteField}
+      <div class="btn-row">${shotInput('Neu aufnehmen')}<button class="btn" data-act="picPlain">Ohne Freistellen</button></div>`;
+  }
+  if (p) {
+    return `${head}
+      <div class="pic-view"><img src="${esc(p.url)}" alt="Foto von ${esc(it.name)}"></div>
+      ${msg}
+      <div class="btn-row">${shotInput('Ersetzen')}
+        <button class="btn${st.picArmed ? ' danger' : ''}" data-act="picDelete">${st.picArmed ? 'Wirklich entfernen?' : `${icon('trash')} Entfernen`}</button></div>`;
+  }
+  return `${head}
+    <p class="muted small">Foto aufnehmen, dann lange auf den Gegenstand drücken und „Auswahl kopieren“ wählen. Schon in „Fotos“ kopiert? Dann direkt übernehmen.</p>
+    ${msg}
+    <div class="btn-row">${shotInput('Foto aufnehmen')}${pasteBtn(false)}</div>
+    ${pasteField}`;
+}
+
+function clearShot() {
+  if (st.shot) URL.revokeObjectURL(st.shot.url);
+  st.shot = null;
+  st.picArmed = false;
+  st.picMsg = '';
+}
+
+function paintPic() {
+  const el = document.getElementById('itemPic');
+  const it = st.current?.items?.find(i => i.id === el?.dataset.id);
+  if (!el || !it) return;
+  el.innerHTML = picPanelHtml(it);
+  wirePaste();
+}
+
+// Einfügen per langem Druck: das Feld nimmt nur Bilder an
+function wirePaste() {
+  const f = document.getElementById('picPasteField');
+  if (!f || f.dataset.wired) return;
+  f.dataset.wired = '1';
+  f.addEventListener('focus', () => { f.textContent = ''; });
+  f.addEventListener('paste', e => {
+    e.preventDefault();
+    const file = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))?.getAsFile();
+    if (file) saveCutout(file);
+    else { st.picMsg = 'Eingefügt, aber kein Bild gefunden.'; paintPic(); }
+  });
+}
+
+async function fillItemPics(boxId) {
+  try {
+    const list = await api.itemPhotos(boxId);
+    if (st.boxId !== boxId) return;
+    st.itemPhotos = new Map(list.map(p => [p.item_id, p]));
+  } catch {
+    st.itemPhotos = new Map();
+  }
+  for (const it of st.current?.items ?? []) {
+    const slot = document.querySelector(`[data-pic="${it.id}"]`);
+    if (slot) slot.outerHTML = picBtnHtml(it);
+  }
+  if (st.panel?.startsWith('pic:')) paintPic();
+}
+
+let picCtx = null;
+async function storePic(blob, cutout) {
+  const itemId = st.panel?.slice(4);
+  if (!itemId || !picCtx) return;
+  toast('Foto wird gespeichert …');
+  await api.setItemPhoto(picCtx.app.household, st.boxId, itemId, blob, cutout);
+  clearShot();
+  st.panel = null;
+  st.itemPhotos = null;
+  toast(cutout ? 'Freigestelltes Foto gespeichert' : 'Foto gespeichert');
+  await picCtx.rerender();
+}
+
+async function saveCutout(blob) {
+  try {
+    const { blob: png, cutout } = await shrinkCutout(blob);
+    await storePic(png, cutout);
+  } catch (e) {
+    console.error(e);
+    toast(errorText(e), 'error');
+  }
+}
+
+const picActions = {
+  // Zwischenablage zuerst lesen: iOS erlaubt das nur direkt im Tipp
+  async picPaste(_, ctx) {
+    picCtx = ctx;
+    let blob;
+    try {
+      blob = await clipboardImage();
+    } catch {
+      st.picMsg = errorText('clipboard_unavailable');
+      paintPic();
+      return;
+    }
+    if (!blob) { st.picMsg = errorText('clipboard_empty'); paintPic(); return; }
+    await saveCutout(blob);
+  },
+  async picPlain(_, ctx) {
+    picCtx = ctx;
+    if (!st.shot) return;
+    await storePic(await shrinkImage(st.shot.file, 1200), false);
+  },
+  async picDelete(_, ctx) {
+    const p = picOf(st.panel?.slice(4));
+    if (!p) return;
+    if (!st.picArmed) { st.picArmed = true; paintPic(); return; }
+    await api.deleteItemPhoto(p);
+    clearShot();
+    st.itemPhotos.delete(p.item_id);
+    st.panel = null;
+    toast('Foto entfernt');
+    await ctx.rerender();
+  }
+};
+
+const picChange = {
+  itemShot(el, ctx) {
+    picCtx = ctx;
+    const file = el.files[0];
+    if (!file) return;
+    clearShot();
+    st.shot = { file, url: URL.createObjectURL(file) };
+    paintPic();
+    document.getElementById('itemPic')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+};
+
 async function fillEvents(ctx, boxId) {
   const el = document.getElementById('events');
   if (!el) return;
@@ -266,6 +425,7 @@ const boxActions = {
   async panel(el, ctx) {
     const v = el.dataset.v || null;
     st.panel = st.panel === v ? null : v;
+    clearShot();
     if (st.panel === 'move' && !st.locations) st.locations = await api.locations(ctx.app.household);
     await ctx.rerender();
     if (st.panel === 'add') document.getElementById('quick')?.focus();
@@ -333,9 +493,15 @@ const boxInput = {
 
 function showBox(ctx, p, opts) {
   resetFor(p.box.id);
-  st.current = p.box;
+  st.current = { ...p.box, items: p.items };
   ctx.setTitle('Kiste', ctx.app.membership.households?.name ?? '', true);
   return boxHtml(p, opts);
+}
+
+// Nach dem Zeichnen: Gegenstandsfotos laden oder vorhandene einsetzen, Einfügen-Feld verdrahten
+function afterPaint() {
+  if (st.itemPhotos === null) fillItemPics(st.boxId);
+  wirePaste();
 }
 
 // ---------- Seiten ----------
@@ -381,12 +547,12 @@ export const resolveView = {
   },
   mounted(ctx) {
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
-    if (st.current && document.getElementById('photos')) fillPhotos(st.current.id);
+    if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); }
   },
-  actions: { ...boxActions, ...photoActions, renameLoc },
+  actions: { ...boxActions, ...photoActions, ...picActions, renameLoc },
   forms: { ...boxForms, claim, renameLocation },
   input: boxInput,
-  change: photoChange
+  change: { ...photoChange, ...picChange }
 };
 
 export const boxView = {
@@ -398,11 +564,11 @@ export const boxView = {
     st.code = p.box.code;
     return showBox(ctx, p);
   },
-  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); },
-  actions: { ...boxActions, ...photoActions },
+  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); afterPaint(); },
+  actions: { ...boxActions, ...photoActions, ...picActions },
   forms: boxForms,
   input: boxInput,
-  change: photoChange
+  change: { ...photoChange, ...picChange }
 };
 
 export const locationView = {

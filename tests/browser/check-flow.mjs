@@ -29,6 +29,7 @@ let who = '';
 async function newPage(as, query = '') {
   if (!shared) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: 'dark' });
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
     shared = await ctx.newPage();
     shared.on('console', m => { if (m.type() === 'error') failures.push(`Konsole (${who}): ${m.text()}`); });
     shared.on('pageerror', e => failures.push(`Seitenfehler (${who}): ${e.message}`));
@@ -81,7 +82,7 @@ try {
   await shot(page, 'kiste');
   check(await page.locator('.item-name', { hasText: 'HDMI-Adapter USB-C' }).isVisible(), 'Kiste zeigt ihre Gegenstände');
 
-  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByRole('button', { name: 'Hinzufügen', exact: true }).first().click();
   await page.fill('#quick', '2x Klinkenkabel, Kabelbinder x50');
   check((await page.locator('#quickPreview').innerText()).includes('50× Kabelbinder'), 'Vorschau der Schnelleingabe');
   await page.getByRole('button', { name: 'Hinzufügen', exact: true }).last().click();
@@ -114,6 +115,40 @@ try {
   await page.locator('#toast', { hasText: 'Foto gelöscht' }).waitFor();
   check(await until(() => page.locator('.photo-thumb img').count().then(n => n === 1)), 'Nach dem Löschen bleibt ein Foto');
 
+  // Foto pro Gegenstand: aufnehmen, freigestelltes Bild aus der Zwischenablage übernehmen, groß ansehen, entfernen
+  await page.locator('[aria-label="Foto für HDMI-Adapter USB-C hinzufügen"]').click();
+  await page.locator('#itemPic').waitFor();
+  await shot(page, 'gegenstand-foto-start');
+  await page.locator('#itemShot').setInputFiles('icons/icon-512.png');
+  await page.locator('.pic-shot').waitFor();
+  await shot(page, 'gegenstand-foto-aufgenommen');
+  // Ersatz für „Auswahl kopieren“: ein PNG mit durchsichtigem Rand in die Zwischenablage legen
+  await page.evaluate(async () => {
+    const c = Object.assign(document.createElement('canvas'), { width: 200, height: 200 });
+    const g = c.getContext('2d');
+    g.fillStyle = '#9A6A3D';
+    g.fillRect(50, 60, 100, 90);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  });
+  await page.getByRole('button', { name: 'Freigestellt übernehmen' }).first().click();
+  await page.locator('#toast', { hasText: 'Freigestelltes Foto gespeichert' }).waitFor();
+  check(await until(() => page.locator('.item-pic img').count().then(n => n === 1)), 'Gegenstand zeigt sein Vorschaubild');
+  await page.locator('[aria-label="Foto von HDMI-Adapter USB-C ansehen"]').click();
+  await page.locator('.pic-view img').waitFor();
+  await shot(page, 'gegenstand-foto-gross');
+  await page.locator('[data-act="picDelete"]').click();
+  await page.getByRole('button', { name: 'Wirklich entfernen?' }).click();
+  await page.locator('#toast', { hasText: 'Foto entfernt' }).waitFor();
+  check(await until(() => page.locator('.item-pic img').count().then(n => n === 0)), 'Nach dem Entfernen kein Vorschaubild mehr');
+
+  // Ohne Freistellen: normales Foto als JPEG
+  await page.locator('[aria-label="Foto für HDMI-Adapter USB-C hinzufügen"]').click();
+  await page.locator('#itemShot').setInputFiles('icons/icon-192.png');
+  await page.getByRole('button', { name: 'Ohne Freistellen' }).click();
+  await page.locator('#toast', { hasText: /^Foto gespeichert/ }).waitFor();
+  check(await until(() => page.locator('.item-pic img').count().then(n => n === 1)), 'Foto ohne Freistellen wird gespeichert');
+
   await page.getByRole('button', { name: 'Verschieben' }).click();
   await shot(page, 'verschieben');
   await page.locator('.choice', { hasText: 'Dachboden' }).click();
@@ -123,7 +158,7 @@ try {
   check(await until(async () => (await page.locator('#events').innerText()).includes('nach Dachboden verschoben')), 'Verlauf zeigt das Verschieben');
 
   // Bearbeiten
-  await page.locator('.item', { hasText: 'Kabelbinder' }).locator('[data-act="panel"]').click();
+  await page.locator('.item', { hasText: 'Kabelbinder' }).locator('[data-v^="edit:"]').click();
   await page.fill('#eqty', '40');
   await page.fill('#enote', 'schwarz, 200 mm');
   await page.getByRole('button', { name: 'Speichern' }).click();
