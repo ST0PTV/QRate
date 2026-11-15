@@ -211,15 +211,20 @@ textarea.input { resize: vertical; min-height: 88px; }
 .ptext { min-width: 0; }
 .pnum { font: 800 6.6mm/1 var(--font-num); letter-spacing: .01em; white-space: nowrap; }
 .pcode { font: 500 2.6mm/1.4 var(--mono); margin-top: 1.5mm; }
-.papp { font: 600 2.2mm/1.2 var(--font); text-transform: uppercase; letter-spacing: .12em; color: #555; margin-top: 1mm; }
-@media screen { .sheet { zoom: .45; } }
+.papp { font: 600 2.4mm/1.2 var(--font); text-transform: uppercase; letter-spacing: .12em; color: #555; margin-top: 1mm; }
+/* Vorschau: Bogen in Originalgröße setzen und als Ganzes verkleinern. Nicht mit `zoom`: iOS Safari hebt dann
+   kleine Schrift auf seine Mindestgröße an, und Nummer und Code verrutschen. Die Hülle hält den verkleinerten Platz frei. */
+@media screen {
+  .sheet-wrap { --s: .42; width: calc(210mm * var(--s)); height: calc(297mm * var(--s)); flex: none; overflow: hidden; }
+  .sheet { transform: scale(var(--s)); transform-origin: 0 0; }
+}
 @page { size: A4 portrait; margin: 0; }
 @media print {
   body { background: #fff; padding: 0; }
   .top, .tabs, .no-print, .toast { display: none !important; }
   #main { max-width: none; margin: 0; display: block; }
   .sheets { display: block; overflow: visible; }
-  .sheet { zoom: 1; page-break-after: always; break-after: page; }
+  .sheet { page-break-after: always; break-after: page; }
   .plabel { outline: 0; }
 }
 

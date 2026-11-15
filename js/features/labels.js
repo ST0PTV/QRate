@@ -100,7 +100,7 @@ export const printView = {
       </form>
       ${chosen.length ? '' : '<p class="muted no-print">Keine Etiketten ausgewählt.</p>'}
       <div class="sheets" style="--ptop:${sel.top}mm; --pleft:${sel.left}mm">
-        ${sheets.map(s => `<div class="sheet">${s.map(cell).join('')}</div>`).join('')}
+        ${sheets.map(s => `<div class="sheet-wrap"><div class="sheet">${s.map(cell).join('')}</div></div>`).join('')}
       </div>`;
   },
   actions: {
