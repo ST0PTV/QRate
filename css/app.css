@@ -235,8 +235,7 @@ textarea.input { resize: vertical; min-height: 88px; }
 .pic-shot { width: 100%; border-radius: var(--radius); display: block; }
 .pic-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 15px; }
 .pic-steps strong { color: var(--text); }
-.pic-view { border-radius: var(--radius); min-height: 200px; display: grid; place-items: center; padding: 12px;
-  background: repeating-conic-gradient(var(--surface-2) 0 25%, var(--surface-3) 0 50%) 50% / 18px 18px; }
+.pic-view { border-radius: var(--radius); min-height: 200px; display: grid; place-items: center; padding: 12px; background: transparent; }
 .pic-view img { max-width: 100%; max-height: 360px; display: block; }
 .paste-field { border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 12px 14px; min-height: var(--tap); color: var(--muted); font-size: 15px; outline: none; }
 .paste-field:focus { border-color: var(--accent); }
