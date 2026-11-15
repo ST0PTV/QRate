@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="QRate Test">
+<meta name="theme-color" content="#000000">
+<title>QRate – Test Freistellen</title>
+<!-- Testseite, nicht Teil der App: prüft, ob iOS „Motiv kopieren“ auf einem Foto in einer Webseite anbietet
+     und ob die Seite das freigestellte Bild aus der Zwischenablage übernehmen kann. Kein fremdes Modell, nur Apple-Bordmittel. -->
+<style>
+  :root { color-scheme: dark; --bg: #000; --surface: #1C1C1E; --fill: rgba(120,120,128,.24); --text: #fff; --muted: #AEAEB2;
+    --accent: #ECEEF0; --on-accent: #111315; --good: #4FD1AE; --warn: #FF9F0A; --danger: #FF453A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 32px); }
+  main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 30px; margin: 0; }
+  h2 { font-size: 17px; margin: 0 0 8px; }
+  p { margin: 0; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .card { background: var(--surface); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .btn { appearance: none; border: 0; min-height: 50px; padding: 0 20px; border-radius: 999px; font-family: inherit; font-size: 17px; font-weight: 600;
+    background: var(--fill); color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn[disabled] { opacity: .45; }
+  ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+  #photo { width: 100%; border-radius: 12px; display: block; }
+  .checker { border-radius: 12px; padding: 12px; display: grid; place-items: center; min-height: 160px;
+    background: repeating-conic-gradient(#3A3A3C 0 25%, #2C2C2E 0 50%) 50% / 20px 20px; }
+  .checker img { max-width: 100%; max-height: 360px; display: block; }
+  .paste { border: 1.5px dashed #48484A; border-radius: 12px; padding: 14px; color: var(--muted); font-size: 15px; min-height: 52px; outline: none; }
+  .paste:focus { border-color: var(--accent); }
+  .diag { font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); white-space: pre-wrap; }
+  .ok { color: var(--good); } .bad { color: var(--danger); } .meh { color: var(--warn); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div><h1>Test: Freistellen</h1><p class="muted">Gehört nicht zur App. Prüft Apples „Motiv kopieren“ in einer Webseite.</p></div>
+
+  <section class="card">
+    <h2>1. Foto aufnehmen</h2>
+    <label class="btn primary">Foto aufnehmen oder wählen<input id="file" type="file" accept="image/*" hidden></label>
+    <img id="photo" alt="Aufgenommenes Foto" hidden>
+    <ol id="howto" class="muted" hidden>
+      <li>Lange auf den Gegenstand im Foto drücken.</li>
+      <li>Im Menü <strong>„Motiv kopieren“</strong> wählen (der Gegenstand leuchtet kurz auf).</li>
+      <li>Unten auf <strong>„Freigestellt einfügen“</strong> tippen.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>2. Freigestellt übernehmen</h2>
+    <button class="btn primary" id="read" type="button">Freigestellt einfügen</button>
+    <p class="muted">Falls der Knopf nichts findet: in das Feld tippen, lange drücken und „Einfügen“ wählen.</p>
+    <div class="paste" id="paste" contenteditable="true" aria-label="Hier einfügen">Hier einfügen …</div>
+    <div class="checker" id="resultBox" hidden><img id="result" alt="Freigestelltes Motiv"></div>
+    <p class="diag" id="resultInfo"></p>
+  </section>
+
+  <section class="card">
+    <h2>Umgebung</h2>
+    <p class="diag" id="env"></p>
+  </section>
+</main>
+<script>
+  // Einfaches Skript ohne Module: läuft auch, wenn die Seite allein zum Home-Bildschirm hinzugefügt wird.
+  const $ = id => document.getElementById(id);
+
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  $('env').textContent = [
+    'Modus: ' + (standalone ? 'Home-Bildschirm-App' : 'Browser'),
+    'Zwischenablage lesen (Knopf): ' + (navigator.clipboard && navigator.clipboard.read ? 'vorhanden' : 'nicht vorhanden'),
+    'Gerät: ' + navigator.userAgent
+  ].join('\n');
+
+  $('file').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const img = $('photo');
+    img.src = URL.createObjectURL(f);
+    img.hidden = false;
+    $('howto').hidden = false;
+  });
+
+  // Ergebnis zeigen und prüfen, ob der Hintergrund wirklich transparent ist
+  async function show(blob, source) {
+    const url = URL.createObjectURL(blob);
+    $('result').src = url;
+    $('resultBox').hidden = false;
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas');
+    const s = Math.min(1, 400 / Math.max(bmp.width, bmp.height));
+    c.width = Math.max(1, Math.round(bmp.width * s));
+    c.height = Math.max(1, Math.round(bmp.height * s));
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height).data;
+    let clear = 0;
+    for (let i = 3; i < px.length; i += 4) if (px[i] < 16) clear++;
+    const share = Math.round(100 * clear / (px.length / 4));
+    const cls = share > 5 ? 'ok' : 'bad';
+    $('resultInfo').innerHTML = `Quelle: ${source}\nFormat: ${blob.type || 'unbekannt'}, ${Math.round(blob.size / 1024)} KB, ${bmp.width} × ${bmp.height} px\n` +
+      `<span class="${cls}">Transparenter Anteil: ${share} %${share > 5 ? ' – freigestellt' : ' – kein transparenter Hintergrund'}</span>`;
+  }
+
+  $('read').addEventListener('click', async () => {
+    try {
+      if (!navigator.clipboard?.read) throw new Error('Diese Umgebung kann die Zwischenablage nicht per Knopf lesen.');
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find(t => t.startsWith('image/'));
+        if (type) return show(await it.getType(type), 'Knopf (' + type + ')');
+      }
+      $('resultInfo').innerHTML = '<span class="meh">In der Zwischenablage ist kein Bild. Erst „Motiv kopieren“, dann erneut tippen.</span>';
+    } catch (e) {
+      $('resultInfo').innerHTML = `<span class="bad">${e.name || 'Fehler'}: ${e.message}</span>`;
+    }
+  });
+
+  // Ausweg: Einfügen per langem Druck in das Feld
+  $('paste').addEventListener('paste', e => {
+    e.preventDefault();
+    const file = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))?.getAsFile();
+    if (file) show(file, 'Einfügen-Feld (' + file.type + ')');
+    else $('resultInfo').innerHTML = '<span class="meh">Eingefügt, aber kein Bild gefunden.</span>';
+  });
+  $('paste').addEventListener('focus', () => { if ($('paste').textContent.startsWith('Hier')) $('paste').textContent = ''; });
+</script>
+</body>
+</html>
