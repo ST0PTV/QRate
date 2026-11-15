@@ -183,6 +183,28 @@ export const restoreItem = id => updateItem(id, { removed_at: null });
 export const renameBox = (id, name) => q('update public.boxes set name = $2 where id = $1', [id, name]);
 export const moveBox = (id, locationId) => q('update public.boxes set location_id = $2 where id = $1', [id, locationId]);
 
+// Fotos: Zeilen und Storage-Objekte in PGlite (mit denselben Policies), die Bilddaten nur im Speicher dieser Seite.
+const photoBlobs = new Map();
+const PHOTO_MISSING = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#8E8E93"/></svg>');
+export async function photos(boxId) {
+  const rows = await q('select id, path, created_by, created_at from public.box_photos where box_id = $1 order by created_at', [boxId]);
+  const visible = new Set((await q(`select name from storage.objects where bucket_id = 'box-photos'`)).map(r => r.name));
+  return rows.map(r => ({ ...r, url: visible.has(r.path) ? (photoBlobs.get(r.path) ?? PHOTO_MISSING) : null }));
+}
+export async function addPhoto(householdId, boxId, blob) {
+  await ready;
+  const path = `${householdId}/${boxId}/${crypto.randomUUID()}.jpg`;
+  await as(current, async t => {
+    await t.q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [path]);
+    await t.q('insert into public.box_photos (box_id, path) values ($1, $2)', [boxId, path]);
+  });
+  photoBlobs.set(path, URL.createObjectURL(blob));
+}
+export async function deletePhoto(photo) {
+  await q('delete from public.box_photos where id = $1', [photo.id]);
+  await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
+}
+
 export async function location(id) {
   const [loc, boxes] = await Promise.all([
     one(`select o.id, o.name, o.label_code, case when l.code is null then null else json_build_object('number', l.number) end as labels

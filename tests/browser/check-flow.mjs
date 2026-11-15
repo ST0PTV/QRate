@@ -103,6 +103,17 @@ try {
   await page.getByText('Entnommene anzeigen').click();
   await page.locator('.item.removed', { hasText: 'Klinkenkabel' }).waitFor();
 
+  // Fotos: zwei hochladen (das App-Icon als Testbild), eins löschen
+  await page.locator('#photoInput').setInputFiles(['icons/icon-512.png', 'icons/icon-192.png']);
+  await page.locator('#toast', { hasText: 'Fotos gespeichert' }).waitFor();
+  check(await page.locator('.photo-main img').isVisible(), 'Foto wird groß angezeigt');
+  check(await page.locator('.photo-thumb img').count() === 2, 'Zwei Vorschaubilder nach dem Hochladen');
+  await shot(page, 'kiste-fotos');
+  await page.locator('[data-act="photoDelete"]').click();
+  await page.getByRole('button', { name: 'Wirklich löschen?' }).click();
+  await page.locator('#toast', { hasText: 'Foto gelöscht' }).waitFor();
+  check(await until(() => page.locator('.photo-thumb img').count().then(n => n === 1)), 'Nach dem Löschen bleibt ein Foto');
+
   await page.getByRole('button', { name: 'Verschieben' }).click();
   await shot(page, 'verschieben');
   await page.locator('.choice', { hasText: 'Dachboden' }).click();

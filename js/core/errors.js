@@ -9,6 +9,9 @@ const ERRORS = {
   name_required: 'Bitte einen Namen eingeben.',
   last_admin: 'Der letzte Admin kann nicht entfernt werden.',
   bad_request: 'Ungültige Eingabe.',
+  photo_limit: 'Höchstens 8 Fotos pro Kiste.',
+  photo_unreadable: 'Das Bild ließ sich nicht lesen. Bitte ein anderes Foto wählen.',
+  'exceeded the maximum allowed size': 'Das Foto ist zu groß.',
   'Failed to fetch': 'Keine Verbindung. Bitte später erneut versuchen.'
 };
 

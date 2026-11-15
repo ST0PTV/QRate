@@ -4,14 +4,17 @@ import { store } from '../core/store.js';
 import { parseQuick } from '../core/parse.js';
 import { humanNumber } from '../core/code.js';
 import { esc, icon, tag, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
+import { errorText } from '../core/errors.js';
+import { shrinkImage } from '../core/photo.js';
 import { boxRow } from './home.js';
 
 // Zustand der geöffneten Kiste (Panels, nachgeladene Listen)
-const st = { boxId: null, code: null, panel: null, locations: null, removed: null };
+const st = { boxId: null, code: null, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null };
+const MAX_PHOTOS = 8;
 
 function resetFor(boxId) {
   if (st.boxId === boxId) return;
-  Object.assign(st, { boxId, panel: null, locations: null, removed: null });
+  Object.assign(st, { boxId, panel: null, locations: null, removed: null, photos: null, photoSel: 0, photoArmed: null });
 }
 
 // ---------- Darstellung ----------
@@ -92,6 +95,7 @@ function boxHtml(p, { cachedAt } = {}) {
     </div>
     <p class="muted small">${icon('takeout', 'inline')} nimmt einen Gegenstand heraus. Er bleibt im Verlauf und lässt sich zurücklegen.</p>
     ${panelHtml(b)}
+    <section class="card stack photos" id="photos">${photosHtml()}</section>
     <section class="card">
       <div class="card-head"><h3>Inhalt</h3><span class="muted small">${p.items.length} ${p.items.length === 1 ? 'Eintrag' : 'Einträge'}</span></div>
       ${p.items.length ? `<div class="items">${p.items.map(itemHtml).join('')}</div>`
@@ -159,6 +163,82 @@ async function loadBox(ctx, id) {
     items: r.items.map(i => ({ ...i, by: ctx.app.name(i.created_by) }))
   };
 }
+
+// ---------- Fotos ----------
+
+const addPhotoBtn = label => `<label class="btn photo-add">${icon('camera')} ${label}
+  <input id="photoInput" type="file" accept="image/*" multiple hidden></label>`;
+
+function photosHtml() {
+  const list = st.photos;
+  if (!list) return '<p class="muted small">Fotos laden …</p>';
+  if (!list.length) return `<div class="card-head"><h3>Fotos</h3></div>${addPhotoBtn('Foto hinzufügen')}`;
+  const sel = list[Math.min(st.photoSel, list.length - 1)];
+  return `<div class="card-head"><h3>Fotos</h3><span class="muted small">${list.length} von ${MAX_PHOTOS}</span></div>
+    <div class="photo-main"><img src="${esc(sel.url)}" alt="Foto der Kiste">
+      <button class="icon-btn photo-del${st.photoArmed === sel.id ? ' armed' : ''}" data-act="photoDelete" data-id="${sel.id}"
+        aria-label="${st.photoArmed === sel.id ? 'Wirklich löschen?' : 'Foto löschen'}">${st.photoArmed === sel.id ? 'Löschen?' : icon('trash')}</button></div>
+    ${list.length > 1 || list.length < MAX_PHOTOS ? `<div class="photo-thumbs">
+      ${list.map((p, i) => `<button class="photo-thumb${p.id === sel.id ? ' on' : ''}" data-act="photoSel" data-i="${i}" aria-label="Foto ${i + 1} zeigen">
+        <img src="${esc(p.url)}" alt=""></button>`).join('')}
+      ${list.length < MAX_PHOTOS ? `<label class="photo-thumb photo-plus" aria-label="Foto hinzufügen">${icon('plus')}
+        <input id="photoInput" type="file" accept="image/*" multiple hidden></label>` : ''}
+    </div>` : ''}`;
+}
+
+function paintPhotos() {
+  const el = document.getElementById('photos');
+  if (el) el.innerHTML = photosHtml();
+}
+
+async function fillPhotos(boxId) {
+  if (st.photos && st.boxId === boxId) return paintPhotos();
+  try {
+    const list = await api.photos(boxId);
+    if (st.boxId !== boxId) return;
+    st.photos = list;
+  } catch {
+    st.photos = [];
+  }
+  paintPhotos();
+}
+
+const photoActions = {
+  photoSel(el) {
+    st.photoSel = Number(el.dataset.i);
+    st.photoArmed = null;
+    paintPhotos();
+  },
+  async photoDelete(el) {
+    if (st.photoArmed !== el.dataset.id) { st.photoArmed = el.dataset.id; paintPhotos(); return; }
+    const photo = st.photos.find(p => p.id === el.dataset.id);
+    st.photoArmed = null;
+    await api.deletePhoto(photo);
+    st.photos = st.photos.filter(p => p.id !== photo.id);
+    st.photoSel = Math.max(0, st.photoSel - 1);
+    toast('Foto gelöscht');
+    paintPhotos();
+  }
+};
+
+const photoChange = {
+  async photoInput(el, ctx) {
+    const files = [...el.files].slice(0, MAX_PHOTOS - (st.photos?.length ?? 0));
+    if (!files.length) { toast(errorText('photo_limit')); return; }
+    const boxId = st.boxId;
+    toast(files.length === 1 ? 'Foto wird hochgeladen …' : `${files.length} Fotos werden hochgeladen …`);
+    try {
+      for (const f of files) await api.addPhoto(ctx.app.household, boxId, await shrinkImage(f));
+      st.photos = await api.photos(boxId);
+      st.photoSel = st.photos.length - 1;
+      toast(files.length === 1 ? 'Foto gespeichert' : 'Fotos gespeichert');
+    } catch (e) {
+      console.error(e);
+      toast(errorText(e), 'error');
+    }
+    if (st.boxId === boxId) paintPhotos();
+  }
+};
 
 async function fillEvents(ctx, boxId) {
   const el = document.getElementById('events');
@@ -301,10 +381,12 @@ export const resolveView = {
   },
   mounted(ctx) {
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
+    if (st.current && document.getElementById('photos')) fillPhotos(st.current.id);
   },
-  actions: { ...boxActions, renameLoc },
+  actions: { ...boxActions, ...photoActions, renameLoc },
   forms: { ...boxForms, claim, renameLocation },
-  input: boxInput
+  input: boxInput,
+  change: photoChange
 };
 
 export const boxView = {
@@ -316,10 +398,11 @@ export const boxView = {
     st.code = p.box.code;
     return showBox(ctx, p);
   },
-  mounted(ctx, id) { fillEvents(ctx, id); },
-  actions: boxActions,
+  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); },
+  actions: { ...boxActions, ...photoActions },
   forms: boxForms,
-  input: boxInput
+  input: boxInput,
+  change: photoChange
 };
 
 export const locationView = {

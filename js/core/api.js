@@ -92,6 +92,31 @@ export const updateItem = (id, patch) => run(sb.from('items').update(patch).eq('
 export const removeItem = id => updateItem(id, { removed_at: new Date().toISOString() });
 export const restoreItem = id => updateItem(id, { removed_at: null });
 export const renameBox = (id, name) => run(sb.from('boxes').update({ name }).eq('id', id));
+
+// ---------- Fotos (privater Bucket box-photos, Pfad <haushalt>/<kiste>/<zufall>.jpg) ----------
+const PHOTOS = 'box-photos';
+export async function photos(boxId) {
+  const rows = await run(sb.from('box_photos').select('id, path, created_by, created_at').eq('box_id', boxId).order('created_at'));
+  if (!rows.length) return [];
+  // Signierte Adressen gelten eine Stunde; die Ansicht lädt sie bei jedem Öffnen neu.
+  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(rows.map(r => r.path), 3600));
+  const url = new Map(signed.map(s => [s.path, s.signedUrl]));
+  return rows.map(r => ({ ...r, url: url.get(r.path) }));
+}
+export async function addPhoto(householdId, boxId, blob) {
+  const path = `${householdId}/${boxId}/${crypto.randomUUID()}.jpg`;
+  await run(sb.storage.from(PHOTOS).upload(path, blob, { contentType: 'image/jpeg' }));
+  try {
+    await run(sb.from('box_photos').insert({ box_id: boxId, path }));
+  } catch (e) {
+    await sb.storage.from(PHOTOS).remove([path]);
+    throw e;
+  }
+}
+export async function deletePhoto(photo) {
+  await run(sb.from('box_photos').delete().eq('id', photo.id));
+  await sb.storage.from(PHOTOS).remove([photo.path]);
+}
 export const moveBox = (id, locationId) => run(sb.from('boxes').update({ location_id: locationId }).eq('id', id));
 
 // ---------- Orte ----------

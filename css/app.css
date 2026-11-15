@@ -212,6 +212,18 @@ textarea.input { resize: vertical; min-height: 88px; }
 .choice:active { opacity: .7; }
 .choice.current { box-shadow: inset 0 0 0 2px var(--accent); }
 
+/* Fotos pro Kiste */
+.photo-add { align-self: flex-start; }
+.photo-main { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--fill); aspect-ratio: 4 / 3; }
+.photo-main img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-del { position: absolute; right: 10px; bottom: 10px; background: rgba(0, 0, 0, .55); color: #fff; }
+.photo-del.armed { width: auto; padding: 0 14px; border-radius: 999px; background: var(--danger); font-size: 15px; font-weight: 600; }
+.photo-thumbs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.photo-thumb { aspect-ratio: 1; border-radius: 10px; overflow: hidden; border: 0; padding: 0; background: var(--fill); color: var(--accent); display: grid; place-items: center; cursor: pointer; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-thumb.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.photo-thumb.on img { opacity: .85; }
+
 /* Scanner */
 .viewfinder { position: relative; aspect-ratio: 1; max-width: 100%; border-radius: 14px; background: #000; overflow: hidden; display: grid; place-items: center; }
 .viewfinder video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }

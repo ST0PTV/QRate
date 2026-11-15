@@ -158,3 +158,35 @@ test('Der letzte Admin kann nicht entfernt werden', async () => {
   const alexMember = (await db.query('select id from public.members where user_id = $1 and household_id = $2', [alex, house])).rows[0].id;
   await rejects(as(db, alex, ({ rpc }) => rpc('set_member_status', { p_member: alexMember, p_action: 'remove' })), 'last_admin');
 });
+
+test('Fotos: Mitglied lädt hoch, Fremder sieht und schreibt nichts, höchstens 8 pro Kiste', async () => {
+  const [label] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'K', p_count: 1 }));
+  const box = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: label.code, p_name: 'Fotokiste' }))[0].claim_label);
+  const path = n => `${house}/${box.id}/${n}.jpg`;
+  const upload = (user, p) => as(db, user, ({ q }) => q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [p]));
+  const addRow = (user, p) => as(db, user, ({ q }) => q('insert into public.box_photos (box_id, path) values ($1, $2) returning household_id, created_by', [box.id, p]));
+
+  await upload(alex, path(1));
+  const [row] = await addRow(alex, path(1));
+  assert.equal(row.household_id, house);
+  assert.equal(row.created_by, alex);
+
+  // Fremder: keine Zeilen, keine Dateien, kein Hochladen in fremde Ordner
+  assert.equal((await as(db, fremd, ({ q }) => q('select * from public.box_photos'))).length, 0);
+  assert.equal((await as(db, fremd, ({ q }) => q(`select * from storage.objects where bucket_id = 'box-photos'`))).length, 0);
+  await rejects(upload(fremd, path('fremd')), 'row-level security');
+  await rejects(addRow(fremd, path('fremd')), 'row-level security');
+  assert.equal((await as(db, fremd, ({ q }) => q(`delete from storage.objects where name = $1 returning id`, [path(1)]))).length, 0);
+
+  // Pfad muss zur Kiste passen
+  await rejects(addRow(alex, `${house}/anders/1.jpg`), 'Foto-Pfad');
+
+  // Nicht angemeldet: Tabelle gar nicht erreichbar
+  await rejects(as(db, null, ({ q }) => q('select * from public.box_photos')), 'permission denied');
+
+  for (let n = 2; n <= 8; n++) await addRow(alex, path(n));
+  await rejects(addRow(alex, path(9)), 'photo_limit');
+
+  // Mitglied darf löschen
+  assert.equal((await as(db, alex, ({ q }) => q('delete from public.box_photos where path = $1 returning id', [path(8)]))).length, 1);
+});
