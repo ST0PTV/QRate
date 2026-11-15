@@ -1,18 +1,32 @@
-// Übersicht: Kennzahlen, Kisten nach Ort, letzte Änderungen.
+// Übersicht: Kennzahlen, alles als Baum, gerade entnommen, letzte Änderungen.
 import { overview, restoreItem } from '../core/api.js';
 import { esc, icon, fmtTime, eventText, toast } from '../core/ui.js';
+import { typeLabel, typeIcon, isPlace, canHold, buildTree } from '../core/types.js';
 
-// Kistenzeile: Icon und Name. Die Nummer steht erst in der Kiste selbst.
-export function boxRow(b) {
-  const n = b.items?.[0]?.count ?? b.item_count ?? 0;
-  return `<a class="row-link" href="#/box/${b.id}">
-    <span class="row-ico">${icon('box')}</span>
-    <span class="grow"><span class="row-title">${esc(b.name)}</span><span class="row-sub">${n === 1 ? '1 Gegenstand' : `${n} Gegenstände`}</span></span>
-  </a>`;
+// Baum: Räume, Regale, Kisten … zum Auf- und Zuklappen. Die obersten zwei Ebenen sind anfangs offen.
+const open = new Set();
+const closed = new Set();
+const OPEN_DEPTH = 1;
+const isOpen = (id, depth) => (depth <= OPEN_DEPTH ? !closed.has(id) : open.has(id));
+
+function treeRows(tree, list, depth) {
+  return list
+    .sort((a, b) => (isPlace(b.type) - isPlace(a.type)) || a.name.localeCompare(b.name, 'de'))
+    .map(t => {
+      const kids = tree.children(t.id);
+      const n = t.items?.[0]?.count ?? 0;
+      const parts = [typeLabel(t.type)];
+      if (kids.length) parts.push(`${kids.length} darin`);
+      if (n) parts.push(n === 1 ? '1 Gegenstand' : `${n} Gegenstände`);
+      const expanded = kids.length && isOpen(t.id, depth);
+      return `<div class="tree-row" style="--depth:${depth}">
+          ${kids.length ? `<button class="tree-toggle" data-act="toggle" data-id="${t.id}" data-depth="${depth}" aria-expanded="${Boolean(expanded)}"
+            aria-label="${esc(t.name)} ${expanded ? 'zuklappen' : 'aufklappen'}">${icon(expanded ? 'down' : 'chevron')}</button>` : '<span class="tree-toggle" aria-hidden="true"></span>'}
+          <a class="row-link grow" href="#/box/${t.id}"><span class="row-ico">${icon(typeIcon(t.type))}</span>
+            <span class="grow"><span class="row-title">${esc(t.name)}</span><span class="row-sub">${esc(parts.join(' · '))}</span></span></a>
+        </div>${expanded ? treeRows(tree, [...kids], depth + 1) : ''}`;
+    }).join('');
 }
-const pinIco = `<span class="row-ico sm">${icon('pin')}</span>`;
-
-const byNumber = (a, b) => (a.labels?.number ?? 1e9) - (b.labels?.number ?? 1e9);
 
 export default {
   id: 'home',
@@ -20,7 +34,7 @@ export default {
   async render(ctx) {
     const { app } = ctx;
     ctx.setTitle(app.membership.households?.name ?? 'Haushalt', `Angemeldet als ${app.membership.display_name}`);
-    const { boxes, locations, freeLabels, events, taken = [] } = await overview(app.household);
+    const { boxes, freeLabels, events, taken = [] } = await overview(app.household);
     const items = boxes.reduce((s, b) => s + (b.items?.[0]?.count ?? 0), 0);
 
     if (!boxes.length) {
@@ -28,8 +42,8 @@ export default {
         <h2>So geht es los</h2>
         <ol class="steps">
           <li><strong>Etiketten drucken:</strong> Unter „Etiketten“ einen Bogen reservieren und drucken.</li>
-          <li><strong>Aufkleben:</strong> Ein Etikett pro Kiste, Orts-Etiketten an Regale oder Schränke.</li>
-          <li><strong>Scannen:</strong> Beim ersten Scan legst du die Kiste an und erfasst den Inhalt.</li>
+          <li><strong>Aufkleben:</strong> An Kisten, Regale, Schränke oder einzelne Geräte. Alle Etiketten sind gleich.</li>
+          <li><strong>Scannen:</strong> Beim ersten Scan wählst du, was es ist, und erfasst den Inhalt.</li>
         </ol>
         <div class="btn-row">
           <a class="btn primary" href="#/etiketten">${icon('label')} Etiketten</a>
@@ -38,18 +52,12 @@ export default {
       </div>`;
     }
 
-    const groups = new Map(locations.map(l => [l.id, { loc: l, boxes: [] }]));
-    const loose = [];
-    for (const b of boxes) (groups.get(b.location_id)?.boxes ?? loose).push(b);
-
-    const group = (title, tagHtml, list, href) => `<section class="card">
-      <a class="group-head" ${href ? `href="${href}"` : ''}>${tagHtml}<h3>${esc(title)}</h3><span class="muted small">${list.length} ${list.length === 1 ? 'Kiste' : 'Kisten'}</span></a>
-      ${list.sort(byNumber).map(boxRow).join('')}
-    </section>`;
+    const tree = buildTree(boxes);
+    const containers = boxes.filter(b => canHold(b.type) && !isPlace(b.type)).length;
 
     return `
       <div class="stats">
-        <div class="stat"><span class="stat-n">${boxes.length}</span><span class="muted">Kisten</span></div>
+        <div class="stat"><span class="stat-n">${containers}</span><span class="muted">Behälter</span></div>
         <div class="stat"><span class="stat-n">${items}</span><span class="muted">Gegenstände</span></div>
         <a class="stat" href="#/etiketten"><span class="stat-n">${freeLabels}</span><span class="muted">freie Etiketten</span></a>
       </div>
@@ -63,14 +71,19 @@ export default {
           <button class="icon-btn small-ico" data-act="restore" data-id="${t.id}" aria-label="„${esc(t.name)}“ zurücklegen">${icon('undo')}</button>
         </div>`).join('')}
       </section>` : ''}
-      ${[...groups.values()].filter(g => g.boxes.length)
-        .map(g => group(g.loc.name, pinIco, g.boxes, `#/loc/${g.loc.id}`)).join('')}
-      ${loose.length ? group('Ohne Ort', pinIco, loose) : ''}
+      <section class="card tree"><div class="card-head"><h3>Alles</h3><span class="muted small">${boxes.length}</span></div>
+        ${treeRows(tree, [...tree.roots], 0)}</section>
       ${events.length ? `<section class="card"><h3 class="card-title">Zuletzt</h3><ul class="events">${events.map(e => `<li>
         <time>${fmtTime(e.at)}</time>
         <a href="#/box/${e.box_id}"><strong>${esc(app.name(e.actor_id))}</strong> ${eventText(e)}</a></li>`).join('')}</ul></section>` : ''}`;
   },
   actions: {
+    toggle(el, ctx) {
+      const id = el.dataset.id;
+      const set = Number(el.dataset.depth) <= OPEN_DEPTH ? closed : open;
+      if (set.has(id)) set.delete(id); else set.add(id);
+      ctx.rerender();
+    },
     async restore(el, ctx) {
       await restoreItem(el.dataset.id);
       toast('Zurückgelegt.');

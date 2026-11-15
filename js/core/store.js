@@ -28,9 +28,13 @@ export const store = {
   pendingInvite: () => read('pending_invite', null),
   setPendingInvite: token => write('pending_invite', token),
 
-  // Kiste, die gerade verschoben wird (wartet auf den Scan eines Orts-Etiketts)
+  // Ding, das gerade verschoben wird (wartet auf den Scan des Ziel-Etiketts)
   moving: () => read('moving', null),
   setMoving: m => write('moving', m),
+
+  // Zuletzt geöffneter Ort oder Behälter: Vorschlag beim Anlegen
+  lastPlace: () => read('last_place', null),
+  setLastPlace: p => write('last_place', p),
 
   // Darstellung auf diesem Gerät: 'system' | 'dark' | 'light'
   theme: () => read('theme', 'system'),

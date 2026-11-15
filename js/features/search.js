@@ -1,19 +1,20 @@
 // Suche über Gegenstände und Kistennamen (Datenbankfunktion search, tippfehlertolerant).
 import { search } from '../core/api.js';
 import { esc, icon } from '../core/ui.js';
+import { typeIcon, typeLabel } from '../core/types.js';
 
 let term = '';
 let timer = null;
 let seq = 0;
 
 function resultsHtml(rows) {
-  if (!term.trim()) return '<p class="muted small">Sucht in Gegenständen und Kistennamen. Tippfehler sind erlaubt.</p>';
+  if (!term.trim()) return '<p class="muted small">Sucht in Gegenständen, Kisten und Orten. Tippfehler sind erlaubt.</p>';
   if (!rows.length) return `<p class="muted">Nichts gefunden für „${esc(term)}“.</p>`;
   return `<section class="card">${rows.map(r => `<a class="row-link" href="#/box/${r.box_id}">
-    <span class="row-ico">${icon('box')}</span>
+    <span class="row-ico">${icon(typeIcon(r.box_type))}</span>
     <span class="grow">
       <span class="row-title">${r.kind === 'item' ? `${r.qty}× ${esc(r.item_name)}` : esc(r.box_name)}</span>
-      <span class="row-sub">${r.kind === 'item' ? esc(r.box_name) + ' · ' : 'Kiste · '}${esc(r.location_name ?? 'ohne Ort')}</span>
+      <span class="row-sub">${r.kind === 'item' ? esc(r.box_name) : esc(typeLabel(r.box_type))}${r.location_name ? ' · ' + esc(r.location_name) : ''}</span>
     </span></a>`).join('')}</section>`;
 }
 

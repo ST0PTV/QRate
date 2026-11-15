@@ -8,14 +8,21 @@ import { AUTH_STUB, AUTH_GRANTS, MIGRATIONS } from './auth-stub.js';
 
 const DIR = join(import.meta.dirname, '..', '..', 'supabase', 'migrations');
 
-export async function createDb() {
+// upTo: nur die Migrationen vor dieser Datei einspielen (zum Prüfen, wie eine Migration bestehende Daten übernimmt).
+export async function createDb({ upTo } = {}) {
   const onDisk = readdirSync(DIR).filter(f => f.endsWith('.sql')).sort();
   if (onDisk.join() !== MIGRATIONS.join()) throw new Error('MIGRATIONS in auth-stub.js passt nicht zu supabase/migrations');
   const db = new PGlite({ extensions: { pg_trgm } });
   await db.exec(AUTH_STUB);
-  for (const f of MIGRATIONS) await db.exec(readFileSync(join(DIR, f), 'utf8'));
+  const until = upTo ? MIGRATIONS.indexOf(upTo) : MIGRATIONS.length;
+  for (const f of MIGRATIONS.slice(0, until)) await db.exec(readFileSync(join(DIR, f), 'utf8'));
   await db.exec(AUTH_GRANTS);
   return db;
+}
+
+export async function migrate(db, file) {
+  await db.exec(readFileSync(join(DIR, file), 'utf8'));
+  await db.exec(AUTH_GRANTS);
 }
 
 export async function createUser(db) {

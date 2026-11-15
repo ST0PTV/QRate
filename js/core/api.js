@@ -44,7 +44,7 @@ export const setMemberStatus = (memberId, action) => rpc('set_member_status', { 
 
 // ---------- Scan und Etiketten ----------
 export const resolve = code => rpc('resolve_label', { p_code: code });
-export const claim = (code, name, locationId) => rpc('claim_label', { p_code: code, p_name: name, p_location: locationId || null });
+export const claim = (code, name, type, parentId) => rpc('claim_label', { p_code: code, p_name: name, p_type: type || null, p_parent: parentId || null });
 export const reserveLabels = (h, kind, count) => rpc('reserve_labels', { p_household: h, p_kind: kind, p_count: count });
 export const blockLabel = code => rpc('block_label', { p_code: code });
 export const labels = h =>
@@ -56,31 +56,25 @@ export async function codeForNumber(h, kind, number) {
 
 // ---------- Übersicht ----------
 export async function overview(h) {
-  const [boxes, locations, free, events, taken] = await Promise.all([
-    run(sb.from('boxes').select('id, name, location_id, label_code, labels(number), items(count)')
-      .eq('household_id', h).is('items.removed_at', null)),
-    run(sb.from('locations').select('id, name, label_code, labels(number)').eq('household_id', h).order('name')),
-    sb.from('labels').select('code', { count: 'exact', head: true }).eq('household_id', h).eq('kind', 'K').eq('status', 'free'),
+  const [boxes, free, events, taken] = await Promise.all([
+    things(h),
+    sb.from('labels').select('code', { count: 'exact', head: true }).eq('household_id', h).eq('status', 'free'),
     run(sb.from('events').select('id, box_id, actor_id, action, detail, at').eq('household_id', h)
       .order('at', { ascending: false }).limit(8)),
     // Gerade entnommen: was aus irgendeiner Kiste fehlt, neueste zuerst
     run(sb.from('items').select('id, name, qty, removed_at, removed_by, box_id, boxes(name)').eq('household_id', h)
       .not('removed_at', 'is', null).order('removed_at', { ascending: false }).limit(10))
   ]);
-  return { boxes, locations, freeLabels: free.count ?? 0, events, taken };
+  return { boxes, freeLabels: free.count ?? 0, events, taken };
 }
 
-// ---------- Kisten ----------
-export async function box(id) {
-  const [b, items] = await Promise.all([
-    run(sb.from('boxes').select('id, name, household_id, created_at, created_by, label_code, labels(number), locations(id, name, labels(number))')
-      .eq('id', id).maybeSingle()),
-    activeItems(id)
-  ]);
-  return b ? { box: b, items } : null;
-}
-export const activeItems = boxId =>
-  run(sb.from('items').select('id, name, qty, note, created_by, created_at').eq('box_id', boxId).is('removed_at', null).order('created_at'));
+// ---------- Dinge (Kisten, Orte, Einzelstücke) ----------
+// Alle Dinge des Haushalts, flach; Baum und Pfade baut die Oberfläche.
+export const things = h =>
+  run(sb.from('boxes').select('id, name, type, parent_id, items(count)').eq('household_id', h).is('items.removed_at', null).order('name'));
+// Ein Ding mit Pfad, darin steckenden Dingen und Gegenständen; null ohne Zugriff
+export const box = id => rpc('get_thing', { p_id: id });
+export const changeType = (id, type) => rpc('change_type', { p_id: id, p_type: type });
 export const removedItems = boxId =>
   run(sb.from('items').select('id, name, qty, removed_at, removed_by').eq('box_id', boxId).not('removed_at', 'is', null)
     .order('removed_at', { ascending: false }).limit(30));
@@ -143,19 +137,7 @@ export async function deleteItemPhoto(photo) {
   await run(sb.from('item_photos').delete().eq('id', photo.id));
   await sb.storage.from(PHOTOS).remove([photo.path]);
 }
-export const moveBox = (id, locationId) => run(sb.from('boxes').update({ location_id: locationId }).eq('id', id));
-
-// ---------- Orte ----------
-export async function location(id) {
-  const [loc, boxes] = await Promise.all([
-    run(sb.from('locations').select('id, name, label_code, labels(number)').eq('id', id).maybeSingle()),
-    run(sb.from('boxes').select('id, name, labels(number), items(count)').eq('location_id', id).is('items.removed_at', null))
-  ]);
-  return loc ? { location: loc, boxes } : null;
-}
-export const locations = h =>
-  run(sb.from('locations').select('id, name, labels(number)').eq('household_id', h).order('name'));
-export const renameLocation = (id, name) => run(sb.from('locations').update({ name }).eq('id', id));
+export const moveBox = (id, parentId) => run(sb.from('boxes').update({ parent_id: parentId || null }).eq('id', id));
 
 // ---------- Suche ----------
 export const search = (h, q) => rpc('search', { p_household: h, p_q: q });

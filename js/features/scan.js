@@ -1,7 +1,6 @@
 // Scannen in der App (Kamera) oder Nummer eintippen. Zeigt an, wenn gerade eine Kiste verschoben wird.
 import { startScanner, stopScanner } from '../core/scanner.js';
 import { store } from '../core/store.js';
-import { humanNumber } from '../core/code.js';
 import { esc, icon, toast } from '../core/ui.js';
 
 let cameraOn = false;
@@ -18,7 +17,7 @@ export default {
     ctx.setTitle('Scannen', 'Etikett vor die Kamera halten');
     const moving = store.moving();
     return `
-      ${moving ? `<div class="banner"><span>Jetzt das Orts-Etikett scannen. ${humanNumber('K', moving.number)} „${esc(moving.name)}“ kommt dorthin.</span>
+      ${moving ? `<div class="banner"><span>Jetzt das Ziel scannen. „${esc(moving.name)}“ kommt dorthin.</span>
         <button class="btn small" data-act="cancelMove">Abbrechen</button></div>` : ''}
       <div class="viewfinder${cameraOn ? ' on' : ''}">
         <video id="cam" playsinline muted></video>
@@ -28,7 +27,7 @@ export default {
       <p class="muted small" id="camMsg">Mit der normalen Handykamera geht es auch, das öffnet den Link aber im Browser statt in der installierten App.</p>
       <form class="card stack" data-form="manual">
         <label class="field"><span>Nummer oder Code eintippen</span>
-          <input class="input" id="manual" placeholder="z. B. K-0003 oder 7KX2M9QD" autocomplete="off" autocapitalize="characters"></label>
+          <input class="input" id="manual" placeholder="z. B. #0042, K-0003 oder 7KX2M9QD" autocomplete="off" autocapitalize="characters"></label>
         <button class="btn" type="submit">Öffnen</button>
       </form>`;
   },

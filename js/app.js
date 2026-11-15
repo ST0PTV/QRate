@@ -7,7 +7,7 @@ import { esc, toast, applyTheme } from './core/ui.js';
 import { parseLabelInput } from './core/code.js';
 import { setupView, loginView, onboardingView, pendingView } from './features/auth.js';
 import homeView from './features/home.js';
-import { resolveView, boxView, locationView } from './features/box.js';
+import { resolveView, boxView } from './features/box.js';
 import scanView from './features/scan.js';
 import searchView from './features/search.js';
 import { labelsView, printView } from './features/labels.js';
@@ -17,7 +17,7 @@ const ROUTES = [
   [/^$/, homeView],
   [/^k\/([0-9A-Z]{8})$/, resolveView],
   [/^box\/([0-9a-f-]{36})$/, boxView],
-  [/^loc\/([0-9a-f-]{36})$/, locationView],
+  [/^loc\/([0-9a-f-]{36})$/, boxView], // alte Links auf Orte
   [/^scan$/, scanView],
   [/^suche$/, searchView],
   [/^etiketten$/, labelsView],

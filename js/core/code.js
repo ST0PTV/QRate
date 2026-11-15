@@ -2,8 +2,9 @@
 
 export const CODE_RE = /^[0-9A-HJKMNP-TV-Z]{8}$/;
 
-// Lesbare Nummer: K-0042 für Kisten, O-007 für Orte.
+// Lesbare Nummer: #0042 für neutrale Etiketten, K-0042 und O-007 für die älteren Kisten- und Orts-Etiketten.
 export function humanNumber(kind, number) {
+  if (kind === 'Q') return number == null ? '#????' : `#${String(number).padStart(4, '0')}`;
   if (number == null) return kind === 'O' ? 'O-???' : 'K-????';
   return kind === 'O' ? `O-${String(number).padStart(3, '0')}` : `K-${String(number).padStart(4, '0')}`;
 }
@@ -20,6 +21,8 @@ export function parseLabelInput(input) {
   if (!s) return null;
   const human = s.toUpperCase().match(/^([KO])\s*-?\s*0*(\d{1,6})$/);
   if (human) return { kind: human[1], number: Number(human[2]) };
+  const neutral = s.match(/^#?\s*0*(\d{1,6})$/);
+  if (neutral) return { kind: 'Q', number: Number(neutral[1]) };
   let raw = s;
   try {
     const u = new URL(s);

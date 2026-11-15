@@ -151,11 +151,11 @@ try {
 
   await page.getByRole('button', { name: 'Verschieben' }).click();
   await shot(page, 'verschieben');
-  await page.locator('.choice', { hasText: 'Dachboden' }).click();
+  await page.locator('.choice', { has: page.locator('.choice-name', { hasText: /^Dachboden$/ }) }).click();
   await page.locator('#toast', { hasText: 'Verschoben' }).waitFor();
-  check(await until(() => page.locator('.box-head', { hasText: 'Dachboden' }).isVisible()), 'Kiste steht nach dem Verschieben im Dachboden');
+  check(await until(() => page.locator('.box-head .crumb', { hasText: 'Dachboden' }).isVisible()), 'Kiste steht nach dem Verschieben im Dachboden');
   await page.locator('#events li').first().waitFor();
-  check(await until(async () => (await page.locator('#events').innerText()).includes('nach Dachboden verschoben')), 'Verlauf zeigt das Verschieben');
+  check(await until(async () => (await page.locator('#events').innerText()).includes('nach Dachboden gestellt')), 'Verlauf zeigt das Verschieben');
 
   // Bearbeiten
   await page.locator('.item', { hasText: 'Kabelbinder' }).locator('[data-v^="edit:"]').click();
@@ -165,64 +165,76 @@ try {
   await page.locator('.item-note', { hasText: 'schwarz, 200 mm' }).waitFor();
   check(await page.locator('.item', { hasText: 'Kabelbinder' }).locator('.qty', { hasText: '40×' }).isVisible(), 'Menge geändert');
 
-  // Suche
+  // Suche zeigt den Pfad
   await page.locator('.tabs [data-tab="search"]').click();
   await page.fill('#q', 'stirnlampe');
   await page.locator('#results .row-link').first().waitFor();
   await shot(page, 'suche');
   check((await page.locator('#results').innerText()).includes('3× Stirnlampen'), 'Suche findet Stirnlampen');
+  await page.fill('#q', 'akkuschrauber');
+  check(await until(async () => (await page.locator('#results').innerText()).includes('Keller › Regal 1')), 'Suche zeigt den Pfad');
 
-  // Scan per Nummer: freies Etikett anlegen
+  // Altes K-Etikett: Typ Kiste ist vorgewählt, Inhalt gleich mit erfassen
   await page.locator('.tabs [data-tab="scan"]').click();
   await shot(page, 'scannen');
   await page.fill('#manual', 'k-5');
   await page.getByRole('button', { name: 'Öffnen' }).click();
-  await page.getByText('Neue Kiste anlegen?').waitFor();
+  await page.getByText('Kiste anlegen').waitFor();
   await shot(page, 'freies-etikett');
   await page.fill('#claimName', 'Fotoalben');
   await page.selectOption('#claimLoc', { label: 'Keller › Regal 1' });
-  await page.getByRole('button', { name: 'Ja, anlegen' }).click();
-  await page.locator('#quick').waitFor();
-  check(await page.locator('.box-head', { hasText: 'Fotoalben' }).isVisible(), 'Neue Kiste ist angelegt');
-  await page.fill('#quick', 'Hochzeitsalbum, 3 Urlaubsalben');
-  await page.getByRole('button', { name: 'Hinzufügen', exact: true }).last().click();
+  await page.fill('#claimItems', 'Hochzeitsalbum, 3 Urlaubsalben');
+  await page.getByRole('button', { name: 'Anlegen' }).click();
   await page.locator('.item-name', { hasText: 'Urlaubsalben' }).waitFor();
+  check(await page.locator('.box-head', { hasText: 'Fotoalben' }).isVisible(), 'Neue Kiste ist angelegt');
+  check(await page.locator('.box-head .crumb', { hasText: 'Regal 1' }).isVisible(), 'Neue Kiste steht im Regal');
   await shot(page, 'neue-kiste');
 
-  // Verschieben per Orts-Etikett: ein freies O-Etikett wird dabei zum neuen Ort
+  // Neutrales Etikett beim Verschieben: erst Typ wählen, dann landet die Kiste darin
   const c = await codes(page);
   await page.getByRole('button', { name: 'Verschieben' }).click();
-  await page.getByRole('button', { name: 'Orts-Etikett scannen' }).click();
+  await page.getByRole('button', { name: 'Ziel-Etikett scannen' }).click();
   await page.locator('.banner').waitFor();
   await shot(page, 'scannen-verschieben');
-  await page.fill('#manual', c.o[2]);
+  await page.fill('#manual', '#4');
   await page.getByRole('button', { name: 'Öffnen' }).click();
-  await page.getByText('Neuen Ort anlegen?').waitFor();
-  check(await page.getByText('Danach kommt K-0005').isVisible(), 'Hinweis auf wartendes Verschieben');
-  await page.fill('#claimName', 'Flur › Einbauschrank');
-  await page.getByRole('button', { name: 'Ja, anlegen' }).click();
-  await page.locator('.box-head', { hasText: 'Flur › Einbauschrank' }).waitFor();
+  await page.getByText('Was ist das?').waitFor();
+  await shot(page, 'typ-waehlen');
+  await page.getByRole('button', { name: 'Schrank', exact: true }).click();
+  await page.getByText('Danach kommt „Fotoalben“ hierhin.').waitFor();
+  await page.fill('#claimName', 'Einbauschrank');
+  await page.selectOption('#claimLoc', { label: 'Dachboden' });
+  await shot(page, 'neues-ding');
+  await page.getByRole('button', { name: 'Anlegen' }).click();
+  await page.locator('.box-head .crumb', { hasText: 'Dachboden › Einbauschrank' }).waitFor();
 
-  // QR-Adresse direkt öffnen (wie die Handykamera)
-  await page.goto(`${BASE}?k=${c.o[0]}`);
+  // Typ ändern
+  await page.getByRole('button', { name: 'Typ', exact: true }).click();
+  await shot(page, 'typ-aendern');
+  await page.getByRole('button', { name: 'Ordner / Mappe' }).click();
+  await page.locator('#toast', { hasText: 'Jetzt: Ordner / Mappe' }).waitFor();
+  check(await until(async () => (await page.locator('#events').innerText()).includes('Typ zu „Ordner / Mappe“')), 'Verlauf zeigt den Typwechsel');
+
+  // QR-Adresse direkt öffnen (wie die Handykamera): das Regal zeigt, was darin steht
+  await page.goto(`${BASE}?k=${c.q[1]}`);
   await page.waitForFunction(() => window.__mockReady === true);
-  await page.getByText('Ort', { exact: true }).waitFor();
+  await page.locator('.box-head', { hasText: 'Regal 1' }).waitFor();
   await shot(page, 'ort');
-  check(await page.locator('.row-title', { hasText: 'Werkzeug' }).isVisible(), 'Ort listet seine Kisten');
+  check(await page.locator('.row-title', { hasText: 'Werkzeug' }).isVisible(), 'Regal listet seine Kisten');
 
-  // Etiketten
+  // Etiketten: neutrale Etiketten reservieren und drucken
   await page.locator('.tabs [data-tab="labels"]').click();
-  await page.getByRole('button', { name: '24 Kisten-Etiketten' }).click();
+  await page.getByRole('button', { name: '24 Etiketten (1 Bogen)' }).click();
   await page.locator('#toast', { hasText: '24 Etiketten reserviert' }).waitFor();
   await shot(page, 'etiketten');
-  check(await page.getByText('K-0036').isVisible(), 'Neue Etiketten setzen die Nummer fort');
+  check(await page.getByText('#0032').isVisible(), 'Neue Etiketten setzen die Nummer fort');
   await page.getByRole('link', { name: 'Druckansicht' }).click();
   await page.locator('.sheet').first().waitFor();
   await shot(page, 'druckansicht');
   const sheetCount = await page.locator('.sheet').count();
-  check(sheetCount === 2, `Druckansicht: 31 freie Kisten-Etiketten ergeben 2 Bogen (gefunden ${sheetCount})`);
+  check(sheetCount === 2, `Druckansicht: 28 freie neutrale Etiketten ergeben 2 Bogen (gefunden ${sheetCount})`);
   const qrOk = await page.locator('.plabel .pqr svg').count();
-  check(qrOk === 31, `Jedes Etikett hat einen QR-Code (${qrOk})`);
+  check(qrOk === 28, `Jedes Etikett hat einen QR-Code (${qrOk})`);
 
   // Haushalt: Einladung
   await page.locator('.tabs [data-tab="house"]').click();
@@ -279,6 +291,7 @@ try {
   await page.waitForFunction(() => window.__mockReady === true);
   await page.waitForSelector('.stats');
   check(await page.locator('.taken .row-title', { hasText: 'Klinkenkabel' }).isVisible(), 'Übersicht zeigt gerade entnommene Gegenstände');
+  check(await page.locator('.tree .row-title', { hasText: 'Einbauschrank' }).isVisible(), 'Übersicht zeigt den Baum');
   await shot(page, 'uebersicht-hell');
 
 } catch (e) {

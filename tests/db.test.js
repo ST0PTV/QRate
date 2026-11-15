@@ -36,7 +36,7 @@ test('Freies Etikett scannen, anlegen, Inhalt erfassen, scannen', async () => {
   assert.equal((await resolve(alex, code)).status, 'free');
 
   const loc = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: oLabels[0].code, p_name: 'Keller › Regal 1' }))[0].claim_label);
-  const box = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: code, p_name: 'Weihnachtsdeko', p_location: loc.id }))[0].claim_label);
+  const box = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: code, p_name: 'Weihnachtsdeko', p_parent: loc.id }))[0].claim_label);
   assert.equal(box.kind, 'K');
 
   await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name, qty) values ($1, 'Lichterkette', 2), ($1, 'Christbaumkugeln rot', 12)`, [box.id]));
@@ -45,12 +45,14 @@ test('Freies Etikett scannen, anlegen, Inhalt erfassen, scannen', async () => {
   assert.equal(r.status, 'box');
   assert.equal(r.box.name, 'Weihnachtsdeko');
   assert.equal(r.box.number, 1);
-  assert.equal(r.box.location.name, 'Keller › Regal 1');
+  assert.equal(r.box.parent.name, 'Keller › Regal 1');
+  assert.equal(r.box.type, 'box');
   assert.deepEqual(r.items.map(i => [i.name, i.qty, i.by]), [['Lichterkette', 2, 'Alex'], ['Christbaumkugeln rot', 12, 'Alex']]);
 
   const rl = await resolve(alex, oLabels[0].code);
-  assert.equal(rl.status, 'location');
-  assert.deepEqual(rl.boxes.map(b => [b.number, b.item_count]), [[1, 2]]);
+  assert.equal(rl.status, 'box');
+  assert.equal(rl.box.type, 'room');
+  assert.deepEqual(rl.children.map(b => [b.name, b.item_count]), [['Weihnachtsdeko', 2]]);
 });
 
 test('Ein belegtes Etikett lässt sich nicht erneut zuordnen', async () => {
@@ -66,7 +68,7 @@ test('Fremder: unbekannter und fremder Code sehen gleich aus', async () => {
 
 test('Fremder: sieht keine Zeilen und kann nichts schreiben', async () => {
   await as(db, fremd, async ({ q, rpc }) => {
-    for (const t of ['households', 'members', 'labels', 'locations', 'boxes', 'items', 'events']) {
+    for (const t of ['households', 'members', 'labels', 'boxes', 'items', 'events']) {
       assert.equal((await q(`select count(*)::int as n from public.${t}`))[0].n, 0, t);
     }
     const boxId = (await db.query('select id from public.boxes limit 1')).rows[0]?.id;
@@ -124,11 +126,11 @@ test('Verschieben: nur an Orte des eigenen Haushalts', async () => {
   const other = await as(db, fremd, async ({ rpc }) => (await rpc('create_household', { p_name: 'Anderer', p_display_name: 'F' }))[0].create_household);
   const [ol] = await as(db, fremd, ({ rpc }) => rpc('reserve_labels', { p_household: other, p_kind: 'O', p_count: 1 }));
   const foreignLoc = await as(db, fremd, async ({ rpc }) => (await rpc('claim_label', { p_code: ol.code, p_name: 'Fremdkeller' }))[0].claim_label);
-  await rejects(as(db, alex, ({ q }) => q('update public.boxes set location_id = $1 where id = $2', [foreignLoc.id, boxId])), 'Ort gehört nicht');
+  await rejects(as(db, alex, ({ q }) => q('update public.boxes set parent_id = $1 where id = $2', [foreignLoc.id, boxId])), 'Ort gehört nicht');
 
   const loc2 = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: oLabels[1].code, p_name: 'Dachboden' }))[0].claim_label);
-  await as(db, robin, ({ q }) => q('update public.boxes set location_id = $1 where id = $2', [loc2.id, boxId]));
-  assert.equal((await resolve(alex, kLabels[0].code)).box.location.name, 'Dachboden');
+  await as(db, robin, ({ q }) => q('update public.boxes set parent_id = $1 where id = $2', [loc2.id, boxId]));
+  assert.equal((await resolve(alex, kLabels[0].code)).box.parent.name, 'Dachboden');
 });
 
 test('Suche: Teilwort und Tippfehler', async () => {
@@ -229,4 +231,60 @@ test('Gegenstandsfoto: eins pro Gegenstand, Fremder sieht und schreibt nichts', 
   // Mitglied ersetzt: altes löschen, neues eintragen
   assert.equal((await as(db, robin, ({ q }) => q('delete from public.item_photos where item_id = $1 returning id', [item.id]))).length, 1);
   await addRow(robin, path(2));
+});
+
+test('Neutrale Etiketten: Typ beim ersten Scan, verschachteln, Pfad', async () => {
+  const q4 = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'Q', p_count: 4 }));
+  assert.deepEqual(q4.map(l => l.kind + l.number), ['Q1', 'Q2', 'Q3', 'Q4']);
+  const claim = (l, name, type, parent) => as(db, alex, async ({ rpc }) =>
+    (await rpc('claim_label', { p_code: l.code, p_name: name, p_type: type, p_parent: parent ?? null }))[0].claim_label);
+
+  // Ohne Typ geht ein neutrales Etikett nicht
+  await rejects(claim(q4[0], 'Keller'), 'bad_request');
+  const keller = await claim(q4[0], 'Keller', 'room');
+  const regal = await claim(q4[1], 'Lastenregal', 'rack', keller.id);
+  const ebene = await claim(q4[2], 'Ebene oben', 'shelf', regal.id);
+  const kiste = await claim(q4[3], 'Werkzeug Elektro', 'box', ebene.id);
+  assert.equal(kiste.type, 'box');
+
+  const r = await resolve(alex, q4[3].code);
+  assert.deepEqual(r.box.path.map(p => p.name), ['Keller', 'Lastenregal', 'Ebene oben']);
+  assert.equal((await resolve(alex, q4[1].code)).children[0].name, 'Ebene oben');
+
+  // Kein Kreis: das Regal darf nicht in seine eigene Ebene
+  await rejects(as(db, alex, ({ q }) => q('update public.boxes set parent_id = $1 where id = $2', [ebene.id, regal.id])), 'cycle');
+
+  // Suche zeigt den Pfad
+  await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name) values ($1, 'Akkuschrauber')`, [kiste.id]));
+  const hit = (await as(db, alex, ({ rpc }) => rpc('search', { p_household: house, p_q: 'akkuschrauber' })))[0];
+  assert.equal(hit.location_name, 'Keller › Lastenregal › Ebene oben');
+
+  // Fremder sieht das Ding nicht
+  assert.equal((await as(db, fremd, ({ rpc }) => rpc('get_thing', { p_id: kiste.id })))[0].get_thing, null);
+});
+
+test('Typ ändern: Inhalt wandert eine Ebene höher, Einzelstück nimmt nichts auf', async () => {
+  const [a, b] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'Q', p_count: 2 }));
+  const claim = (l, name, type, parent) => as(db, alex, async ({ rpc }) =>
+    (await rpc('claim_label', { p_code: l.code, p_name: name, p_type: type, p_parent: parent ?? null }))[0].claim_label);
+  const schrank = await claim(a, 'Werkzeugschrank', 'cabinet');
+  const koffer = await claim(b, 'Werkzeugkoffer rot', 'box', schrank.id);
+  await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name) values ($1, 'Bits'), ($1, 'Zange')`, [koffer.id]));
+  const retype = (id, type, user = alex) => as(db, user, ({ rpc }) => rpc('change_type', { p_id: id, p_type: type }));
+
+  await rejects(retype(koffer.id, 'rakete'), 'bad_request');
+  await rejects(retype(koffer.id, 'tool', fremd), 'no_access');
+  await retype(koffer.id, 'tool');
+  const left = await as(db, alex, ({ q }) => q('select count(*)::int as n from public.items where box_id = $1', [koffer.id]));
+  assert.equal(left[0].n, 0);
+  const moved = await as(db, alex, ({ q }) => q('select name from public.items where box_id = $1 order by name', [schrank.id]));
+  assert.deepEqual(moved.map(m => m.name), ['Bits', 'Zange']);
+
+  // In ein Einzelstück kann nichts hinein
+  await rejects(as(db, alex, ({ q }) => q(`update public.items set box_id = $1 where name = 'Bits'`, [koffer.id])), 'single');
+  const ev = await as(db, alex, ({ q }) => q(`select action from public.events where box_id = $1 order by at desc limit 1`, [koffer.id]));
+  assert.equal(ev[0].action, 'box_retyped');
+
+  // Ohne übergeordneten Ort kann ein voller Schrank kein Einzelstück werden
+  await rejects(retype(schrank.id, 'furniture'), 'type_needs_parent');
 });

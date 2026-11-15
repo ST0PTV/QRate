@@ -316,7 +316,28 @@ textarea.input { resize: vertical; min-height: 88px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* Kiste: drei Aktionen in einer Reihe, Zeilen-Aktionen als Icons */
-.actions3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.actions3 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .actions3 .btn { min-width: 0; padding: 0 6px; font-size: 15px; gap: 6px; white-space: nowrap; }
 @media (max-width: 430px) { .actions3 .btn .ic { display: none; } }
 .item .icon-btn { width: 36px; height: 36px; }
+
+/* Typen, Pfad und Baum (neutrale Etiketten) */
+.type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.type-btn { border: 0; border-radius: 12px; background: var(--fill); color: var(--text); padding: 10px 6px; min-height: 80px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; font: 600 13px/1.2 var(--font); }
+.type-btn.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.type-btn:active { opacity: .7; }
+.type-ico { width: 32px; height: 32px; border-radius: 9px; background: var(--surface-2); color: var(--accent); display: grid; place-items: center; }
+.type-ico .ic { width: 20px; height: 20px; }
+.type-head { font-size: 13px; font-weight: 600; margin: 4px 0 -4px; }
+.type-head .muted { font-weight: 400; }
+.crumb { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin-bottom: 2px; }
+.crumb a { color: var(--muted); }
+.big-tag.ico { padding: 8px; display: grid; place-items: center; }
+.big-tag.ico .ic { width: 28px; height: 28px; }
+.choice .grow { display: flex; flex-direction: column; min-width: 0; padding: 8px 0; }
+.tree-row { display: flex; align-items: center; gap: 4px; padding-left: calc(var(--depth) * 18px); border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
+.card-head + .tree-row { border-top: 0; }
+.tree-row .row-link { border-top: 0; min-width: 0; }
+.tree-toggle { width: 32px; height: var(--tap-s); flex: none; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.tree-toggle .ic { width: 18px; height: 18px; }

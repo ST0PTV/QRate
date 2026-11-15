@@ -5,7 +5,7 @@ import { humanNumber, labelUrl } from '../core/code.js';
 import { icon, qrSvg, toast } from '../core/ui.js';
 
 const PER_SHEET = 24;
-const sel = { filter: 'free', kind: 'K', start: 1, top: 0, left: 0 };
+const sel = { filter: 'free', kind: 'Q', start: 1, top: 0, left: 0 };
 let armed = null; // Code, dessen Sperre auf Bestätigung wartet
 
 const STATUS = { free: 'frei', active: 'in Benutzung', blocked: 'gesperrt' };
@@ -24,19 +24,19 @@ export const labelsView = {
     ctx.setTitle('Etiketten', 'Reservieren und drucken');
     const all = await labels(ctx.app.household);
     const chosen = selected(all);
-    const count = k => all.filter(l => l.kind === k && l.status === 'free').length;
+    const free = all.filter(l => l.status === 'free').length;
+    const legacy = all.some(l => l.kind !== 'Q');
     return `
       <section class="card stack">
         <h3>Neue Etiketten reservieren</h3>
-        <p class="muted small">Jedes Etikett bekommt eine fortlaufende Nummer und einen zufälligen Code. Frei sind gerade ${count('K')} Kisten- und ${count('O')} Orts-Etiketten.</p>
+        <p class="muted small">Alle Etiketten sind gleich. Erst beim ersten Scan legst du fest, ob es ein Raum, ein Regal, eine Kiste oder ein Gerät ist. Frei sind gerade ${free}.</p>
         <div class="btn-row">
-          <button class="btn primary" data-act="reserve" data-kind="K" data-n="24">${icon('plus')} 24 Kisten-Etiketten</button>
-          <button class="btn" data-act="reserve" data-kind="O" data-n="6">${icon('plus')} 6 Orts-Etiketten</button>
+          <button class="btn primary" data-act="reserve" data-kind="Q" data-n="24">${icon('plus')} 24 Etiketten (1 Bogen)</button>
         </div>
       </section>
       <section class="card stack">
         <h3>Drucken</h3>
-        <div class="seg-row">${seg('kind', [['K', 'Kisten'], ['O', 'Orte'], ['all', 'Beide']])}${seg('filter', [['free', 'Nur freie'], ['all', 'Alle']])}</div>
+        <div class="seg-row">${legacy ? seg('kind', [['Q', 'Neue'], ['K', 'Kisten'], ['O', 'Orte'], ['all', 'Alle']]) : ''}${seg('filter', [['free', 'Nur freie'], ['all', 'Alle']])}</div>
         <p class="muted small">${chosen.length} Etiketten ausgewählt, ${Math.ceil((chosen.length + sel.start - 1) / PER_SHEET) || 0} Bogen.</p>
         <a class="btn primary" href="#/druck" ${chosen.length ? '' : 'aria-disabled="true"'}>${icon('print')} Druckansicht</a>
       </section>
@@ -68,7 +68,7 @@ export const labelsView = {
       if (armed !== el.dataset.code) { armed = el.dataset.code; await ctx.rerender(); return; }
       armed = null;
       await blockLabel(el.dataset.code);
-      toast('Etikett gesperrt. Die Kiste bleibt erhalten.');
+      toast('Etikett gesperrt. Das Ding bleibt erhalten.');
       await ctx.rerender();
     }
   }

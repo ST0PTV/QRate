@@ -1,5 +1,6 @@
 // Kleine UI-Helfer: Escaping, Icons, QR, Datumsformat, Meldungen.
 import { humanNumber } from './code.js';
+import { typeLabel } from './types.js';
 
 // null/undefined ergeben einen leeren Text, nie "null".
 export const esc = v => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -34,7 +35,24 @@ const ICONS = {
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
-  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>'
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+  // Typen von Dingen
+  rack: '<path d="M5 3v18M19 3v18M5 8h14M5 14h14M5 20h14"/>',
+  cabinet: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 3v18M10 11v2M14 11v2"/>',
+  shelf: '<path d="M3 12h18M5 12v3M19 12v3"/><rect x="6" y="6" width="5" height="6" rx="1"/><rect x="13" y="8" width="4" height="4" rx="1"/>',
+  drawer: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 12h16M10 8.5h4M10 15.5h4"/>',
+  pegboard: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
+  bin: '<path d="M4 9h16l-1.5 10h-13z"/><path d="M3 6h18v3H3z"/>',
+  case: '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V5h6v3M3 13h18"/>',
+  sack: '<path d="M8 4h8l-2 4c3 1 5 4 5 7a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5c0-3 2-6 5-7z"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  hanger: '<path d="M12 7a2 2 0 1 1 2-2"/><path d="M12 7v2L3 16h18l-9-7"/>',
+  thing: '<path d="M4 7h11l2 3h3v5H4z"/><path d="M7 15v4M17 15v4"/>',
+  tool: '<path d="M14.5 5.5a4 4 0 0 0-5 5L4 16l4 4 5.5-5.5a4 4 0 0 0 5-5l-2.5 2.5-3-1-1-3z"/>',
+  chair: '<path d="M7 4v9h10V4M6 13h12v3H6zM7 16v4M17 16v4"/>',
+  bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-7h5l3 7M10 9l3 7h-7M14 6h3"/>'
 };
 export const icon = (name, cls = '') =>
   `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ''}</svg>`;
@@ -55,9 +73,11 @@ export function qrSvg(text) {
 export function eventText(e) {
   const d = e.detail ?? {};
   switch (e.action) {
-    case 'box_created': return 'hat die Kiste angelegt';
-    case 'box_moved': return d.to ? `hat die Kiste nach ${esc(d.to)} verschoben` : 'hat den Ort entfernt';
-    case 'box_renamed': return `hat die Kiste in „${esc(d.name)}“ umbenannt`;
+    case 'box_created': return 'hat es angelegt';
+    case 'box_moved': return d.to ? `hat es nach ${esc(d.to)} gestellt` : 'hat den Ort entfernt';
+    case 'box_renamed': return `hat es in „${esc(d.name)}“ umbenannt`;
+    case 'box_retyped': return `hat den Typ zu „${esc(typeLabel(d.type))}“ geändert`;
+    case 'item_moved': return `hat „${esc(d.name)}“ hierher gelegt`;
     case 'item_added': return `hat ${d.qty > 1 ? esc(d.qty) + '× ' : ''}„${esc(d.name)}“ hinzugefügt`;
     case 'item_removed': return `hat „${esc(d.name)}“ entnommen`;
     case 'item_restored': return `hat „${esc(d.name)}“ zurückgelegt`;

@@ -7,6 +7,7 @@ test('humanNumber', () => {
   assert.equal(humanNumber('K', 42), 'K-0042');
   assert.equal(humanNumber('O', 7), 'O-007');
   assert.equal(humanNumber('K', null), 'K-????');
+  assert.equal(humanNumber('Q', 42), '#0042');
 });
 
 test('cleanCode: Crockford-Verwechsler', () => {
@@ -22,6 +23,9 @@ test('parseLabelInput: Adresse, Code, Nummer, Unsinn', () => {
   assert.deepEqual(parseLabelInput(' 7kx2m9qd '), { code: '7KX2M9QD' });
   assert.deepEqual(parseLabelInput('K-0003'), { kind: 'K', number: 3 });
   assert.deepEqual(parseLabelInput('o 12'), { kind: 'O', number: 12 });
+  assert.deepEqual(parseLabelInput('#0042'), { kind: 'Q', number: 42 });
+  assert.deepEqual(parseLabelInput('42'), { kind: 'Q', number: 42 });
+  assert.deepEqual(parseLabelInput('23456789'), { code: '23456789' });
   assert.equal(parseLabelInput('hallo'), null);
   assert.equal(parseLabelInput(''), null);
   assert.equal(parseLabelInput('https://example.org/'), null);

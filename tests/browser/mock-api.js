@@ -37,7 +37,8 @@ export const ready = (async () => {
   }
   window.__mockCodes = {
     k: (await db.query(`select code from public.labels where kind = 'K' and household_id = (select id from public.households order by created_at limit 1) order by number`)).rows.map(r => r.code),
-    o: (await db.query(`select code from public.labels where kind = 'O' and household_id = (select id from public.households order by created_at limit 1) order by number`)).rows.map(r => r.code)
+    o: (await db.query(`select code from public.labels where kind = 'O' and household_id = (select id from public.households order by created_at limit 1) order by number`)).rows.map(r => r.code),
+    q: (await db.query(`select code from public.labels where kind = 'Q' and household_id = (select id from public.households order by created_at limit 1) order by number`)).rows.map(r => r.code)
   };
   window.__mockReady = true;
 })();
@@ -75,11 +76,13 @@ async function seed() {
   const robinMember = (await db.query('select id from public.members where user_id = $1', [USERS.robin.id])).rows[0].id;
   await call('alex', 'set_member_status', { p_member: robinMember, p_action: 'approve' });
   const k = await run('alex', 'select * from public.reserve_labels($1, $2, $3)', [h, 'K', 12]);
-  const o = await run('alex', 'select * from public.reserve_labels($1, $2, $3)', [h, 'O', 4]);
-  const locs = [];
-  for (const [i, name] of ['Keller › Regal 1', 'Dachboden'].entries()) {
-    locs.push((await call('alex', 'claim_label', { p_code: o[i].code, p_name: name })).id);
-  }
+  await run('alex', 'select * from public.reserve_labels($1, $2, $3)', [h, 'O', 2]);
+  const nq = await run('alex', 'select * from public.reserve_labels($1, $2, $3)', [h, 'Q', 8]);
+  // Orte: Keller › Regal 1 und Dachboden; die übrigen neutralen Etiketten bleiben frei
+  const keller = (await call('alex', 'claim_label', { p_code: nq[0].code, p_name: 'Keller', p_type: 'room' })).id;
+  const regal = (await call('alex', 'claim_label', { p_code: nq[1].code, p_name: 'Regal 1', p_type: 'rack', p_parent: keller })).id;
+  const dach = (await call('alex', 'claim_label', { p_code: nq[2].code, p_name: 'Dachboden', p_type: 'room' })).id;
+  const locs = [regal, dach];
   const boxes = [
     ['robin', 'Weihnachtsdeko', 1, ['2x Lichterkette innen', '12x Christbaumkugeln rot', 'Baumspitze Stern', 'Verlängerungskabel 5 m']],
     ['alex', 'Werkzeug', 0, ['Akkuschrauber', 'Bit-Set', 'Wasserwaage 60 cm', 'Schrauben & Dübel, gemischt']],
@@ -87,7 +90,7 @@ async function seed() {
     ['robin', 'Camping', null, ['Zelt 3 Personen', '2x Isomatten', 'Gaskocher', '3x Stirnlampen']]
   ];
   for (const [i, [user, name, li, items]] of boxes.entries()) {
-    const b = await call(user, 'claim_label', { p_code: k[i].code, p_name: name, p_location: li == null ? null : locs[li] });
+    const b = await call(user, 'claim_label', { p_code: k[i].code, p_name: name, p_parent: li == null ? null : locs[li] });
     for (const s of items) {
       const m = s.match(/^(\d+)x (.+)$/);
       await run(i % 2 && s === items.at(-1) ? 'alex' : user, 'insert into public.items (box_id, name, qty) values ($1, $2, $3)', [b.id, m ? m[2] : s, m ? Number(m[1]) : 1]);
@@ -126,7 +129,7 @@ export const acceptInvite = (token, displayName) => rpc('accept_invite', { p_tok
 export const setMemberStatus = (memberId, action) => rpc('set_member_status', { p_member: memberId, p_action: action });
 
 export const resolve = code => rpc('resolve_label', { p_code: code });
-export const claim = (code, name, locationId) => rpc('claim_label', { p_code: code, p_name: name, p_location: locationId || null });
+export const claim = (code, name, type, parentId) => rpc('claim_label', { p_code: code, p_name: name, p_type: type || null, p_parent: parentId || null });
 export const reserveLabels = (h, kind, count) => q('select * from public.reserve_labels($1, $2, $3)', [h, kind, count]);
 export const blockLabel = code => rpc('block_label', { p_code: code });
 export const labels = h => q('select code, kind, number, status from public.labels where household_id = $1 order by kind, number', [h]);
@@ -134,36 +137,24 @@ export async function codeForNumber(h, kind, number) {
   return (await one('select code from public.labels where household_id = $1 and kind = $2 and number = $3', [h, kind, number]))?.code ?? null;
 }
 
-const BOX_COLS = `b.id, b.name, b.location_id, b.label_code,
-  case when l.code is null then null else json_build_object('number', l.number) end as labels,
-  json_build_array(json_build_object('count', (select count(*)::int from public.items i where i.box_id = b.id and i.removed_at is null))) as items`;
+export const things = h => q(`select b.id, b.name, b.type, b.parent_id,
+  json_build_array(json_build_object('count', (select count(*)::int from public.items i where i.box_id = b.id and i.removed_at is null))) as items
+  from public.boxes b where b.household_id = $1 order by b.name`, [h]);
 
 export async function overview(h) {
-  const [boxes, locations, free, events, taken] = await Promise.all([
-    q(`select ${BOX_COLS} from public.boxes b left join public.labels l on l.code = b.label_code where b.household_id = $1`, [h]),
-    q(`select o.id, o.name, o.label_code, case when l.code is null then null else json_build_object('number', l.number) end as labels
-       from public.locations o left join public.labels l on l.code = o.label_code where o.household_id = $1 order by o.name`, [h]),
-    one(`select count(*)::int as n from public.labels where household_id = $1 and kind = 'K' and status = 'free'`, [h]),
+  const [boxes, free, events, taken] = await Promise.all([
+    things(h),
+    one(`select count(*)::int as n from public.labels where household_id = $1 and status = 'free'`, [h]),
     q('select id, box_id, actor_id, action, detail, at from public.events where household_id = $1 order by at desc limit 8', [h]),
     q(`select i.id, i.name, i.qty, i.removed_at, i.removed_by, i.box_id, json_build_object('name', b.name) as boxes
        from public.items i join public.boxes b on b.id = i.box_id
        where i.household_id = $1 and i.removed_at is not null order by i.removed_at desc limit 10`, [h])
   ]);
-  return { boxes, locations, freeLabels: free.n, events, taken };
+  return { boxes, freeLabels: free.n, events, taken };
 }
 
-export async function box(id) {
-  const [b, items] = await Promise.all([
-    one(`select b.id, b.name, b.household_id, b.created_at, b.created_by, b.label_code,
-      case when l.code is null then null else json_build_object('number', l.number) end as labels,
-      case when o.id is null then null else json_build_object('id', o.id, 'name', o.name,
-        'labels', (select json_build_object('number', ol.number) from public.labels ol where ol.code = o.label_code)) end as locations
-      from public.boxes b left join public.labels l on l.code = b.label_code left join public.locations o on o.id = b.location_id where b.id = $1`, [id]),
-    activeItems(id)
-  ]);
-  return b ? { box: b, items } : null;
-}
-export const activeItems = boxId => q('select id, name, qty, note, created_by, created_at from public.items where box_id = $1 and removed_at is null order by created_at', [boxId]);
+export const box = id => rpc('get_thing', { p_id: id });
+export const changeType = (id, type) => rpc('change_type', { p_id: id, p_type: type });
 export const removedItems = boxId => q('select id, name, qty, removed_at, removed_by from public.items where box_id = $1 and removed_at is not null order by removed_at desc limit 30', [boxId]);
 export const boxEvents = boxId => q('select id, actor_id, action, detail, at from public.events where box_id = $1 order by at desc limit 15', [boxId]);
 export async function addItems(boxId, list) {
@@ -181,7 +172,7 @@ export async function updateItem(id, patch) {
 export const removeItem = id => updateItem(id, { removed_at: new Date().toISOString() });
 export const restoreItem = id => updateItem(id, { removed_at: null });
 export const renameBox = (id, name) => q('update public.boxes set name = $2 where id = $1', [id, name]);
-export const moveBox = (id, locationId) => q('update public.boxes set location_id = $2 where id = $1', [id, locationId]);
+export const moveBox = (id, parentId) => q('update public.boxes set parent_id = $2 where id = $1', [id, parentId || null]);
 
 // Fotos: Zeilen und Storage-Objekte in PGlite (mit denselben Policies), die Bilddaten nur im Speicher dieser Seite.
 const photoBlobs = new Map();
@@ -225,17 +216,5 @@ export async function deleteItemPhoto(photo) {
   await q('delete from public.item_photos where id = $1', [photo.id]);
   await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
 }
-
-export async function location(id) {
-  const [loc, boxes] = await Promise.all([
-    one(`select o.id, o.name, o.label_code, case when l.code is null then null else json_build_object('number', l.number) end as labels
-         from public.locations o left join public.labels l on l.code = o.label_code where o.id = $1`, [id]),
-    q(`select ${BOX_COLS} from public.boxes b left join public.labels l on l.code = b.label_code where b.location_id = $1`, [id])
-  ]);
-  return loc ? { location: loc, boxes } : null;
-}
-export const locations = h => q(`select o.id, o.name, case when l.code is null then null else json_build_object('number', l.number) end as labels
-  from public.locations o left join public.labels l on l.code = o.label_code where o.household_id = $1 order by o.name`, [h]);
-export const renameLocation = (id, name) => q('update public.locations set name = $2 where id = $1', [id, name]);
 
 export const search = (h, term) => q('select * from public.search($1, $2)', [h, term]);
