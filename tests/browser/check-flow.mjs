@@ -185,6 +185,11 @@ try {
   await shot(page, 'haushalt');
   const token = (await page.locator('.invite .mono').innerText()).trim();
   check(/^[0-9A-HJKMNP-TV-Z]{16}$/.test(token), 'Einladungscode hat 16 Zeichen');
+  // Darstellung: Hell setzt html[data-theme], System nimmt es wieder weg
+  await page.getByRole('button', { name: 'Hell', exact: true }).click();
+  check(await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'light')), 'Darstellung Hell wird angewendet');
+  await page.getByRole('button', { name: 'System', exact: true }).click();
+  check(await until(() => page.evaluate(() => !document.documentElement.dataset.theme)), 'Darstellung System folgt wieder dem Gerät');
 
   // ---------- Neu: Einladung annehmen, wartet, Alex bestätigt ----------
   console.log('Neu');
@@ -227,6 +232,7 @@ try {
   await page.goto(`${BASE}?as=alex`);
   await page.waitForFunction(() => window.__mockReady === true);
   await page.waitForSelector('.stats');
+  check(await page.locator('.taken .row-title', { hasText: 'Klinkenkabel' }).isVisible(), 'Übersicht zeigt gerade entnommene Gegenstände');
   await shot(page, 'uebersicht-hell');
 
 } catch (e) {

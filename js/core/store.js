@@ -32,6 +32,10 @@ export const store = {
   moving: () => read('moving', null),
   setMoving: m => write('moving', m),
 
+  // Darstellung auf diesem Gerät: 'system' | 'dark' | 'light'
+  theme: () => read('theme', 'system'),
+  setTheme: t => write('theme', t === 'system' ? null : t),
+
   email: () => read('email', ''),
   setEmail: e => write('email', e),
 

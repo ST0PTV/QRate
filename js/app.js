@@ -3,7 +3,7 @@
 import { isConfigured } from './core/config.js';
 import { initApi, auth, memberships, members, errorText, codeForNumber } from './core/api.js';
 import { store } from './core/store.js';
-import { esc, toast } from './core/ui.js';
+import { esc, toast, applyTheme } from './core/ui.js';
 import { parseLabelInput } from './core/code.js';
 import { setupView, loginView, onboardingView, pendingView } from './features/auth.js';
 import homeView from './features/home.js';
@@ -230,6 +230,7 @@ async function boot() {
   show();
 }
 
+applyTheme(store.theme());
 takeUrlParams();
 if (isConfigured()) {
   initApi();

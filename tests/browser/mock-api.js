@@ -139,14 +139,17 @@ const BOX_COLS = `b.id, b.name, b.location_id, b.label_code,
   json_build_array(json_build_object('count', (select count(*)::int from public.items i where i.box_id = b.id and i.removed_at is null))) as items`;
 
 export async function overview(h) {
-  const [boxes, locations, free, events] = await Promise.all([
+  const [boxes, locations, free, events, taken] = await Promise.all([
     q(`select ${BOX_COLS} from public.boxes b left join public.labels l on l.code = b.label_code where b.household_id = $1`, [h]),
     q(`select o.id, o.name, o.label_code, case when l.code is null then null else json_build_object('number', l.number) end as labels
        from public.locations o left join public.labels l on l.code = o.label_code where o.household_id = $1 order by o.name`, [h]),
     one(`select count(*)::int as n from public.labels where household_id = $1 and kind = 'K' and status = 'free'`, [h]),
-    q('select id, box_id, actor_id, action, detail, at from public.events where household_id = $1 order by at desc limit 8', [h])
+    q('select id, box_id, actor_id, action, detail, at from public.events where household_id = $1 order by at desc limit 8', [h]),
+    q(`select i.id, i.name, i.qty, i.removed_at, i.removed_by, i.box_id, json_build_object('name', b.name) as boxes
+       from public.items i join public.boxes b on b.id = i.box_id
+       where i.household_id = $1 and i.removed_at is not null order by i.removed_at desc limit 10`, [h])
   ]);
-  return { boxes, locations, freeLabels: free.n, events };
+  return { boxes, locations, freeLabels: free.n, events, taken };
 }
 
 export async function box(id) {

@@ -1,15 +1,16 @@
-// Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Haushalt wechseln, Abmelden.
+// Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Darstellung, Haushalt wechseln, Abmelden.
 import { CONFIG } from '../core/config.js';
 import { members, createInvite, setMemberStatus, renameHousehold, auth } from '../core/api.js';
 import { inviteUrl } from '../core/code.js';
 import { store } from '../core/store.js';
-import { esc, qrSvg, toast, copyText, fmtTime } from '../core/ui.js';
+import { esc, qrSvg, toast, copyText, fmtTime, applyTheme } from '../core/ui.js';
 
 let invite = null;      // { token, expires_at }
 let armed = null;       // Mitglied, dessen Entfernen auf Bestätigung wartet
 let renaming = false;
 
 const ROLE = { admin: 'Admin', member: 'Mitglied', guest: 'Gast' };
+const THEMES = [['system', 'System'], ['dark', 'Dunkel'], ['light', 'Hell']];
 
 export default {
   id: 'household',
@@ -48,6 +49,13 @@ export default {
             <button class="btn primary" data-act="invite">Einladung erzeugen</button>`}
       </section>` : ''}
       <section class="card stack">
+        <h3>Darstellung</h3>
+        <div class="seg seg-wide" role="group" aria-label="Darstellung">
+          ${THEMES.map(([v, label]) => `<button type="button" data-act="theme" data-v="${v}" aria-pressed="${store.theme() === v}">${label}</button>`).join('')}
+        </div>
+        <p class="muted small">Gilt nur auf diesem Gerät. „System“ folgt der Einstellung des Handys.</p>
+      </section>
+      <section class="card stack">
         <h3>Einstellungen</h3>
         ${renaming ? `<form class="stack" data-form="rename"><label class="field"><span>Name des Haushalts</span>
             <input class="input" id="hhName" maxlength="80" required value="${esc(hhName)}"></label>
@@ -79,6 +87,11 @@ export default {
       await refreshNames(ctx);
     },
     toggleRename(_, ctx) { renaming = !renaming; ctx.rerender(); },
+    theme(el, ctx) {
+      store.setTheme(el.dataset.v);
+      applyTheme(el.dataset.v);
+      ctx.rerender();
+    },
     switch: (el, ctx) => ctx.switchHousehold(el.dataset.id),
     async signOut() {
       store.clearAll();

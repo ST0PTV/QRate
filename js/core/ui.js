@@ -31,6 +31,9 @@ const ICONS = {
   box: '<path d="M3.5 7.5 12 3.5l8.5 4v9L12 20.5l-8.5-4z"/><path d="M3.5 7.5 12 11.5l8.5-4M12 11.5v9"/>',
   pin: '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>'
 };
 export const icon = (name, cls = '') =>
@@ -61,6 +64,15 @@ export function eventText(e) {
     case 'item_changed': return `hat „${esc(d.name)}“ geändert`;
     default: return esc(e.action);
   }
+}
+
+// Darstellung anwenden: 'light' / 'dark' setzt html[data-theme], 'system' folgt dem Handy.
+export function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === 'light' || mode === 'dark') root.dataset.theme = mode;
+  else delete root.dataset.theme;
+  const light = mode === 'light' || (mode !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#F2F2F7' : '#000000');
 }
 
 let toastTimer;

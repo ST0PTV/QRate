@@ -56,15 +56,18 @@ export async function codeForNumber(h, kind, number) {
 
 // ---------- Übersicht ----------
 export async function overview(h) {
-  const [boxes, locations, free, events] = await Promise.all([
+  const [boxes, locations, free, events, taken] = await Promise.all([
     run(sb.from('boxes').select('id, name, location_id, label_code, labels(number), items(count)')
       .eq('household_id', h).is('items.removed_at', null)),
     run(sb.from('locations').select('id, name, label_code, labels(number)').eq('household_id', h).order('name')),
     sb.from('labels').select('code', { count: 'exact', head: true }).eq('household_id', h).eq('kind', 'K').eq('status', 'free'),
     run(sb.from('events').select('id, box_id, actor_id, action, detail, at').eq('household_id', h)
-      .order('at', { ascending: false }).limit(8))
+      .order('at', { ascending: false }).limit(8)),
+    // Gerade entnommen: was aus irgendeiner Kiste fehlt, neueste zuerst
+    run(sb.from('items').select('id, name, qty, removed_at, removed_by, box_id, boxes(name)').eq('household_id', h)
+      .not('removed_at', 'is', null).order('removed_at', { ascending: false }).limit(10))
   ]);
-  return { boxes, locations, freeLabels: free.count ?? 0, events };
+  return { boxes, locations, freeLabels: free.count ?? 0, events, taken };
 }
 
 // ---------- Kisten ----------
