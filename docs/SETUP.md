@@ -25,7 +25,11 @@ Unter **Authentication**:
 2. **URL Configuration:**
    - *Site URL:* die App-Adresse, z. B. `https://st0ptv.github.io/QRate/`
    - *Redirect URLs:* dieselbe Adresse und für lokale Tests `http://localhost:8787/`
-3. **Emails → Templates → Magic Link:** den Code in die Mail aufnehmen, damit die Anmeldung auch in der installierten Homescreen-App funktioniert. Zum Beispiel:
+3. **Emails → SMTP Settings:** eigenen Mailversand eintragen. Ohne ihn schickt Supabase nur an Adressen des eigenen Supabase-Teams, und die Vorlagen lassen sich nicht bearbeiten. Kostenlos geht das z. B. mit [Brevo](https://www.brevo.com) (300 Mails pro Tag):
+   - Bei Brevo unter *Senders* eine Absenderadresse anlegen und bestätigen.
+   - Unter *SMTP & API → SMTP* einen Standard-Schlüssel erzeugen (wird nur einmal angezeigt).
+   - In Supabase: Host `smtp-relay.brevo.com`, Port `587`, Username = SMTP-Login von Brevo, Password = der Schlüssel, Sender = die bestätigte Adresse, Name `QRate`.
+4. **Emails → Templates → Magic link or OTP:** den Code in die Mail aufnehmen, damit die Anmeldung auch in der installierten Homescreen-App funktioniert. Zum Beispiel:
 
    ```html
    <h2>Dein QRate-Code</h2>
@@ -33,9 +37,9 @@ Unter **Authentication**:
    <p>Oder direkt anmelden: <a href="{{ .ConfirmationURL }}">Anmelden</a></p>
    ```
 
-   Dasselbe Template unter **Confirm signup** eintragen, das bekommen neue Nutzer bei der ersten Anmeldung.
+   Dasselbe Template unter **Confirm sign up** eintragen, das bekommen neue Nutzer bei der ersten Anmeldung.
 
-Hinweis: Der eingebaute Mailversand von Supabase schickt nur wenige Mails pro Stunde. Für einen Haushalt reicht das meistens; sonst unter **Emails → SMTP Settings** einen eigenen Mailserver eintragen.
+Hinweis: Im kostenlosen Tarif pausiert Supabase ein Projekt nach etwa einer Woche ohne Nutzung. Dann im Dashboard auf **Resume project** klicken; die Daten bleiben erhalten, die Wiederherstellung dauert einige Minuten.
 
 ## 4. App verbinden
 
