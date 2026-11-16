@@ -215,12 +215,53 @@ try {
   await page.locator('#toast', { hasText: 'Jetzt: Ordner / Mappe' }).waitFor();
   check(await until(async () => (await page.locator('#events').innerText()).includes('Typ zu „Ordner / Mappe“')), 'Verlauf zeigt den Typwechsel');
 
+  // Verleihen mit Erinnerung heute: steht auf der Übersicht als fällig
+  await page.getByRole('button', { name: 'Verleihen' }).click();
+  await page.locator('#lendName').waitFor();
+  await page.fill('#lendName', 'Jonas');
+  await page.fill('#lendPhone', '0170 1234567');
+  await page.getByRole('button', { name: '2 Wochen' }).click();
+  check((await page.inputValue('#lendDate')).length === 10, 'Schnellwahl setzt das Erinnerungsdatum');
+  await page.fill('#lendDate', await page.evaluate(() => new Date().toLocaleDateString('sv-SE')));
+  await page.uncheck('#lendCal');
+  await shot(page, 'verleihen');
+  await page.locator('form[data-form="lendForm"] button[type="submit"]').click();
+  await page.locator('.lent-bar', { hasText: 'An Jonas' }).waitFor();
+  await shot(page, 'verliehen');
+  check(await page.locator('a[href^="sms:"]').count() === 1, 'Nachricht-Knopf bei Telefonnummer');
+  await page.locator('.tabs [data-tab="home"]').click();
+  await page.locator('.lent .lend-row.due', { hasText: 'Fotoalben' }).waitFor();
+  await shot(page, 'uebersicht-verliehen');
+  await page.locator('.lent [data-act="returned"]').click();
+  await page.locator('#toast', { hasText: 'Zurück erhalten' }).waitFor();
+  check(await until(() => page.locator('.lent').count().then(n => n === 0)), 'Nach dem Zurückgeben ist nichts mehr verliehen');
+
   // QR-Adresse direkt öffnen (wie die Handykamera): das Regal zeigt, was darin steht
   await page.goto(`${BASE}?k=${c.q[1]}`);
   await page.waitForFunction(() => window.__mockReady === true);
   await page.locator('.box-head', { hasText: 'Regal 1' }).waitFor();
   await shot(page, 'ort');
   check(await page.locator('.row-title', { hasText: 'Werkzeug' }).isVisible(), 'Regal listet seine Kisten');
+
+  // Einräumen: Ziel öffnen, dann ein freies Etikett anlegen und eine bestehende Kiste scannen
+  await page.getByRole('button', { name: 'Einräumen' }).click();
+  await page.locator('.banner', { hasText: 'Einräumen in „Regal 1“' }).waitFor();
+  await page.fill('#manual', '#5');
+  await page.getByRole('button', { name: 'Öffnen' }).click();
+  await page.getByText('Was ist das?').waitFor();
+  await page.getByRole('button', { name: 'Kiste', exact: true }).click();
+  await page.getByText('Vorgeschlagen: Ziel beim Einräumen.').waitFor();
+  await page.fill('#claimName', 'Winterjacken');
+  await page.getByRole('button', { name: 'Anlegen' }).click();
+  await page.locator('.stow-row', { hasText: 'Winterjacken' }).waitFor();
+  await page.fill('#manual', 'k-1');
+  await page.getByRole('button', { name: 'Öffnen' }).click();
+  await page.locator('.stow-row', { hasText: 'vorher: Dachboden' }).waitFor();
+  await shot(page, 'einraeumen');
+  await page.getByRole('button', { name: 'Fertig' }).click();
+  await page.locator('.box-head', { hasText: 'Regal 1' }).waitFor();
+  check(await page.locator('.row-title', { hasText: 'Weihnachtsdeko' }).isVisible(), 'Eingeräumte Kiste steht im Regal');
+  check(await page.locator('.row-title', { hasText: 'Winterjacken' }).isVisible(), 'Neu angelegte Kiste steht im Regal');
 
   // Etiketten: neutrale Etiketten reservieren und drucken
   await page.locator('.tabs [data-tab="labels"]').click();
@@ -232,9 +273,9 @@ try {
   await page.locator('.sheet').first().waitFor();
   await shot(page, 'druckansicht');
   const sheetCount = await page.locator('.sheet').count();
-  check(sheetCount === 2, `Druckansicht: 28 freie neutrale Etiketten ergeben 2 Bogen (gefunden ${sheetCount})`);
+  check(sheetCount === 2, `Druckansicht: 27 freie neutrale Etiketten ergeben 2 Bogen (gefunden ${sheetCount})`);
   const qrOk = await page.locator('.plabel .pqr svg').count();
-  check(qrOk === 28, `Jedes Etikett hat einen QR-Code (${qrOk})`);
+  check(qrOk === 27, `Jedes Etikett hat einen QR-Code (${qrOk})`);
 
   // Haushalt: Einladung
   await page.locator('.tabs [data-tab="house"]').click();

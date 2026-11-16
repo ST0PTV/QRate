@@ -288,3 +288,45 @@ test('Typ ändern: Inhalt wandert eine Ebene höher, Einzelstück nimmt nichts a
   // Ohne übergeordneten Ort kann ein voller Schrank kein Einzelstück werden
   await rejects(retype(schrank.id, 'furniture'), 'type_needs_parent');
 });
+
+test('Ausleihen: Person, Erinnerung, einmal gleichzeitig, Fremder sieht nichts', async () => {
+  const [a, b] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'Q', p_count: 2 }));
+  const claim = (l, name, type) => as(db, alex, async ({ rpc }) =>
+    (await rpc('claim_label', { p_code: l.code, p_name: name, p_type: type }))[0].claim_label);
+  const bohrer = await claim(a, 'Akkuschrauber', 'tool');
+  const garage = await claim(b, 'Garage', 'room');
+  const [jonas] = await as(db, alex, ({ q }) => q(`insert into public.borrowers (household_id, name, phone) values ($1, 'Jonas', '0170 000000') returning id`, [house]));
+  const lend = (user, boxId, borrower = jonas.id) => as(db, user, ({ q }) =>
+    q(`insert into public.lendings (box_id, borrower_id, remind_at, note) values ($1, $2, current_date + 90, 'mit 2 Akkus') returning household_id, created_by, lent_at`, [boxId, borrower]));
+
+  const [row] = await lend(robin, bohrer.id);
+  assert.equal(row.household_id, house);
+  assert.equal(row.created_by, robin);
+
+  // Nur einmal gleichzeitig, Orte gar nicht
+  await rejects(lend(alex, bohrer.id), 'duplicate key');
+  await rejects(lend(alex, garage.id), 'not_lendable');
+
+  // Verlauf nennt die Person
+  const ev = await as(db, alex, ({ q }) => q(`select action, detail from public.events where box_id = $1 order by at desc limit 1`, [bohrer.id]));
+  assert.deepEqual([ev[0].action, ev[0].detail.to], ['lent', 'Jonas']);
+
+  // Fremder: keine Personen, keine Ausleihen, keine fremde Person verwenden, nichts zurückbuchen
+  assert.equal((await as(db, fremd, ({ q }) => q('select * from public.borrowers'))).length, 0);
+  assert.equal((await as(db, fremd, ({ q }) => q('select * from public.lendings'))).length, 0);
+  assert.equal((await as(db, fremd, ({ q }) => q('update public.lendings set returned_at = now() returning id'))).length, 0);
+  await rejects(as(db, fremd, ({ q }) => q(`insert into public.borrowers (household_id, name) values ($1, 'X')`, [house])), 'row-level security');
+  await rejects(as(db, null, ({ q }) => q('select * from public.borrowers')), 'permission denied');
+
+  // Zurück erhalten, danach wieder verleihbar
+  await as(db, alex, ({ q }) => q('update public.lendings set returned_at = now() where box_id = $1 and returned_at is null', [bohrer.id]));
+  const back = await as(db, alex, ({ q }) => q(`select action, detail from public.events where box_id = $1 order by at desc limit 1`, [bohrer.id]));
+  assert.deepEqual([back[0].action, back[0].detail.from], ['returned', 'Jonas']);
+  await lend(alex, bohrer.id);
+
+  // Person löschen: Verlauf bleibt, ohne Namen
+  await as(db, alex, ({ q }) => q('delete from public.borrowers where id = $1', [jonas.id]));
+  const hist = await as(db, alex, ({ q }) => q('select borrower_id from public.lendings where box_id = $1', [bohrer.id]));
+  assert.equal(hist.length, 2);
+  assert.ok(hist.every(h => h.borrower_id === null));
+});

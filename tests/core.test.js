@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLabelInput, humanNumber, cleanCode, labelUrl, inviteUrl } from '../js/core/code.js';
+import { reminderIcs, inDays } from '../js/core/ics.js';
 import { parseQuick } from '../js/core/parse.js';
 
 test('humanNumber', () => {
@@ -61,4 +62,13 @@ test('parseQuick: leer und Grenzen', () => {
   assert.deepEqual(parseQuick('0x Nichts'), []);
   assert.equal(parseQuick('99999999 Sand')[0].name, '99999999 Sand');
   assert.equal(parseQuick('x'.repeat(200))[0].name.length, 120);
+});
+
+test('Kalendereintrag: Datum, Alarm, Sonderzeichen maskiert', () => {
+  const ics = reminderIcs({ uid: 'abc', date: '2027-02-16', title: 'Akkuschrauber zurückholen (bei Robin)', description: 'mit 2 Akkus, Ladegerät; Koffer' });
+  assert.match(ics, /DTSTART:20270216T090000\r\n/);
+  assert.match(ics, /BEGIN:VALARM\r\nACTION:DISPLAY/);
+  assert.ok(ics.includes('DESCRIPTION:mit 2 Akkus\\, Ladegerät\\; Koffer'));
+  assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.endsWith('END:VCALENDAR\r\n'));
+  assert.equal(inDays(90, new Date(2026, 10, 16)), '2027-02-14');
 });

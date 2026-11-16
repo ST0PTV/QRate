@@ -341,3 +341,16 @@ textarea.input { resize: vertical; min-height: 88px; }
 .tree-row .row-link { border-top: 0; min-width: 0; }
 .tree-toggle { width: 32px; height: var(--tap-s); flex: none; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
 .tree-toggle .ic { width: 18px; height: 18px; }
+
+/* Ausleihen und Einräumen */
+.lent-bar { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 12px 14px; font-size: 15px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.lent-bar .ic { flex: none; margin-top: 2px; }
+.pill.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--text); }
+.lend-history { margin: 0; padding-left: 18px; font-size: 14px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.check { display: flex; align-items: center; gap: 10px; min-height: var(--tap-s); font-size: 15px; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+.stow-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
+.card-head + .stow-row { border-top: 0; }
+.stow-row > .ic { color: var(--good); flex: none; }
+.lend-row.due { box-shadow: inset 3px 0 0 var(--warn); padding-left: 10px; }

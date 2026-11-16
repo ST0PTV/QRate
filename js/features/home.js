@@ -1,6 +1,7 @@
 // Übersicht: Kennzahlen, alles als Baum, gerade entnommen, letzte Änderungen.
-import { overview, restoreItem } from '../core/api.js';
-import { esc, icon, fmtTime, eventText, toast } from '../core/ui.js';
+import { overview, restoreItem, openLendings, returnLending } from '../core/api.js';
+import { inDays } from '../core/ics.js';
+import { esc, icon, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { typeLabel, typeIcon, isPlace, canHold, buildTree } from '../core/types.js';
 
 // Baum: Räume, Regale, Kisten … zum Auf- und Zuklappen. Die obersten zwei Ebenen sind anfangs offen.
@@ -34,7 +35,8 @@ export default {
   async render(ctx) {
     const { app } = ctx;
     ctx.setTitle(app.membership.households?.name ?? 'Haushalt', `Angemeldet als ${app.membership.display_name}`);
-    const { boxes, freeLabels, events, taken = [] } = await overview(app.household);
+    const [{ boxes, freeLabels, events, taken = [] }, lent] = await Promise.all([overview(app.household), openLendings(app.household).catch(() => [])]);
+    const today = inDays(0);
     const items = boxes.reduce((s, b) => s + (b.items?.[0]?.count ?? 0), 0);
 
     if (!boxes.length) {
@@ -62,6 +64,17 @@ export default {
         <a class="stat" href="#/etiketten"><span class="stat-n">${freeLabels}</span><span class="muted">freie Etiketten</span></a>
       </div>
       <a class="btn primary wide" href="#/scan">${icon('scan')} Etikett scannen</a>
+      ${lent.length ? `<section class="card lent">
+        <div class="card-head"><h3>Verliehen</h3><span class="muted small">${lent.length}</span></div>
+        ${lent.map(l => {
+          const due = l.remind_at && l.remind_at <= today;
+          return `<div class="taken-row lend-row${due ? ' due' : ''}">
+            <a class="grow" href="#/box/${l.box_id}"><span class="row-title">${esc(l.boxes?.name ?? 'Ding')}</span>
+              <span class="row-sub">bei ${esc(l.borrowers?.name ?? 'Person gelöscht')} · seit ${fmtDay(l.lent_at)}${due ? ' · Erinnerung fällig' : ''}</span></a>
+            ${due ? `<button class="btn small" data-act="returned" data-id="${l.id}">Zurück</button>` : ''}
+          </div>`;
+        }).join('')}
+      </section>` : ''}
       ${taken.length ? `<section class="card taken">
         <div class="card-head"><h3>Gerade entnommen</h3><span class="muted small">${taken.length}</span></div>
         ${taken.map(t => `<div class="taken-row">
@@ -83,6 +96,11 @@ export default {
       const set = Number(el.dataset.depth) <= OPEN_DEPTH ? closed : open;
       if (set.has(id)) set.delete(id); else set.add(id);
       ctx.rerender();
+    },
+    async returned(el, ctx) {
+      await returnLending(el.dataset.id);
+      toast('Zurück erhalten');
+      await ctx.rerender();
     },
     async restore(el, ctx) {
       await restoreItem(el.dataset.id);

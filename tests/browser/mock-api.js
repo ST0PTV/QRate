@@ -217,4 +217,20 @@ export async function deleteItemPhoto(photo) {
   await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
 }
 
+// Ausleihen
+export const borrowers = h => q('select id, name, phone from public.borrowers where household_id = $1 order by name', [h]);
+export const addBorrower = (h, name, phone) =>
+  one('insert into public.borrowers (household_id, name, phone) values ($1, $2, $3) returning id, name, phone', [h, name, phone || null]);
+export const deleteBorrower = id => q('delete from public.borrowers where id = $1', [id]);
+const LEND_SQL = `select l.id, l.box_id, l.borrower_id, l.lent_at, to_char(l.remind_at, 'YYYY-MM-DD') as remind_at, l.returned_at, l.note,
+  case when p.id is null then null else json_build_object('name', p.name, 'phone', p.phone) end as borrowers,
+  json_build_object('name', b.name, 'type', b.type) as boxes
+  from public.lendings l left join public.borrowers p on p.id = l.borrower_id join public.boxes b on b.id = l.box_id`;
+export const boxLendings = boxId => q(`${LEND_SQL} where l.box_id = $1 order by l.lent_at desc limit 20`, [boxId]);
+export const openLendings = h => q(`${LEND_SQL} where l.household_id = $1 and l.returned_at is null order by l.remind_at nulls last`, [h]);
+export const lend = (boxId, borrowerId, remindAt, note) =>
+  q('insert into public.lendings (box_id, borrower_id, remind_at, note) values ($1, $2, $3, $4)', [boxId, borrowerId, remindAt || null, note || null]);
+export const returnLending = id => q('update public.lendings set returned_at = now() where id = $1', [id]);
+export const remindLater = (id, remindAt) => q('update public.lendings set remind_at = $2 where id = $1', [id, remindAt]);
+
 export const search = (h, term) => q('select * from public.search($1, $2)', [h, term]);

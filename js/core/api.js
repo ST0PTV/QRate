@@ -139,5 +139,21 @@ export async function deleteItemPhoto(photo) {
 }
 export const moveBox = (id, parentId) => run(sb.from('boxes').update({ parent_id: parentId || null }).eq('id', id));
 
+// ---------- Ausleihen (Personen ohne App-Zugang, nur Name und Telefon) ----------
+export const borrowers = h => run(sb.from('borrowers').select('id, name, phone').eq('household_id', h).order('name'));
+export const addBorrower = (h, name, phone) =>
+  run(sb.from('borrowers').insert({ household_id: h, name, phone: phone || null }).select('id, name, phone').single());
+export const deleteBorrower = id => run(sb.from('borrowers').delete().eq('id', id));
+const LEND_COLS = 'id, box_id, borrower_id, lent_at, remind_at, returned_at, note, borrowers(name, phone)';
+export const boxLendings = boxId =>
+  run(sb.from('lendings').select(LEND_COLS).eq('box_id', boxId).order('lent_at', { ascending: false }).limit(20));
+export const openLendings = h =>
+  run(sb.from('lendings').select(LEND_COLS + ', boxes(name, type)').eq('household_id', h).is('returned_at', null)
+    .order('remind_at', { ascending: true, nullsFirst: false }));
+export const lend = (boxId, borrowerId, remindAt, note) =>
+  run(sb.from('lendings').insert({ box_id: boxId, borrower_id: borrowerId, remind_at: remindAt || null, note: note || null }));
+export const returnLending = id => run(sb.from('lendings').update({ returned_at: new Date().toISOString() }).eq('id', id));
+export const remindLater = (id, remindAt) => run(sb.from('lendings').update({ remind_at: remindAt }).eq('id', id));
+
 // ---------- Suche ----------
 export const search = (h, q) => rpc('search', { p_household: h, p_q: q });

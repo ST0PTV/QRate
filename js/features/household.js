@@ -1,6 +1,6 @@
 // Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Darstellung, Haushalt wechseln, Abmelden.
 import { CONFIG } from '../core/config.js';
-import { members, createInvite, setMemberStatus, renameHousehold, auth } from '../core/api.js';
+import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower } from '../core/api.js';
 import { inviteUrl } from '../core/code.js';
 import { store } from '../core/store.js';
 import { esc, qrSvg, toast, copyText, fmtTime, applyTheme } from '../core/ui.js';
@@ -8,6 +8,7 @@ import { esc, qrSvg, toast, copyText, fmtTime, applyTheme } from '../core/ui.js'
 let invite = null;      // { token, expires_at }
 let armed = null;       // Mitglied, dessen Entfernen auf Bestätigung wartet
 let renaming = false;
+let armedPerson = null; // Person, deren Löschen auf Bestätigung wartet
 
 const ROLE = { admin: 'Admin', member: 'Mitglied', guest: 'Gast' };
 const THEMES = [['system', 'System'], ['dark', 'Dunkel'], ['light', 'Hell']];
@@ -19,7 +20,7 @@ export default {
     const { app } = ctx;
     const hhName = app.membership.households?.name ?? 'Haushalt';
     ctx.setTitle(hhName, `${ROLE[app.membership.role]} · ${app.membership.display_name}`);
-    const list = await members(app.household);
+    const [list, people] = await Promise.all([members(app.household), borrowers(app.household).catch(() => [])]);
     const pending = list.filter(m => m.status === 'pending');
     const active = list.filter(m => m.status === 'active');
     const others = app.memberships.filter(m => m.status === 'active' && m.household_id !== app.household);
@@ -48,6 +49,14 @@ export default {
           : `<p class="muted small">Das neue Mitglied scannt den Code mit dem eigenen Handy oder öffnet den Link.</p>
             <button class="btn primary" data-act="invite">Einladung erzeugen</button>`}
       </section>` : ''}
+      ${people.length ? `<section class="card">
+        <h3 class="card-title">Personen zum Ausleihen</h3>
+        <p class="muted small">Nur Name und Telefon, sichtbar für Mitglieder dieses Haushalts. Beim Löschen bleibt der Ausleih-Verlauf ohne Namen.</p>
+        ${people.map(p => `<div class="member"><span class="avatar">${esc(p.name.slice(0, 1).toUpperCase())}</span>
+          <div class="grow"><strong>${esc(p.name)}</strong>${p.phone ? `<div class="muted small">${esc(p.phone)}</div>` : ''}</div>
+          <button class="btn small ghost${armedPerson === p.id ? ' danger' : ''}" data-act="deletePerson" data-id="${p.id}">${armedPerson === p.id ? 'Wirklich löschen?' : 'Löschen'}</button>
+        </div>`).join('')}
+      </section>` : ''}
       <section class="card stack">
         <h3>Darstellung</h3>
         <div class="seg seg-wide" role="group" aria-label="Darstellung">
@@ -67,6 +76,13 @@ export default {
       </section>`;
   },
   actions: {
+    async deletePerson(el, ctx) {
+      if (armedPerson !== el.dataset.id) { armedPerson = el.dataset.id; await ctx.rerender(); return; }
+      armedPerson = null;
+      await deleteBorrower(el.dataset.id);
+      toast('Person gelöscht');
+      await ctx.rerender();
+    },
     async invite(_, ctx) {
       invite = await createInvite(ctx.app.household);
       await ctx.rerender();

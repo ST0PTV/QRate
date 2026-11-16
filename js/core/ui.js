@@ -37,6 +37,8 @@ const ICONS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  message: '<path d="M4 5h16v11H9l-5 4z"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
   // Typen von Dingen
   rack: '<path d="M5 3v18M19 3v18M5 8h14M5 14h14M5 20h14"/>',
@@ -77,6 +79,8 @@ export function eventText(e) {
     case 'box_moved': return d.to ? `hat es nach ${esc(d.to)} gestellt` : 'hat den Ort entfernt';
     case 'box_renamed': return `hat es in „${esc(d.name)}“ umbenannt`;
     case 'box_retyped': return `hat den Typ zu „${esc(typeLabel(d.type))}“ geändert`;
+    case 'lent': return d.to ? `hat es an ${esc(d.to)} verliehen` : 'hat es verliehen';
+    case 'returned': return d.from ? `hat es von ${esc(d.from)} zurückbekommen` : 'hat es zurückbekommen';
     case 'item_moved': return `hat „${esc(d.name)}“ hierher gelegt`;
     case 'item_added': return `hat ${d.qty > 1 ? esc(d.qty) + '× ' : ''}„${esc(d.name)}“ hinzugefügt`;
     case 'item_removed': return `hat „${esc(d.name)}“ entnommen`;

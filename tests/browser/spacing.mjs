@@ -23,7 +23,7 @@ export async function auditSpacing(p, where) {
       collect(c);
       blocks.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
       // Listenzeilen (Inhalt, Etiketten, Mitglieder, Kisten) haben eigene Trennlinien und zählen nicht als Bausteine
-      const listRow = (e) => e.matches('.row-link, .item, .label-row, .member, .tree-row');
+      const listRow = (e) => e.matches('.row-link, .item, .label-row, .member, .tree-row, .stow-row');
       for (let i = 1; i < blocks.length; i++) {
         if (listRow(blocks[i]) && listRow(blocks[i - 1])) continue;
         const a = blocks[i - 1].getBoundingClientRect(), b = blocks[i].getBoundingClientRect();

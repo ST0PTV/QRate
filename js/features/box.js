@@ -6,6 +6,7 @@ import { humanNumber } from '../core/code.js';
 import { esc, icon, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { errorText } from '../core/errors.js';
 import { shrinkImage, shrinkCutout, clipboardImage } from '../core/photo.js';
+import { reminderIcs, downloadIcs, inDays } from '../core/ics.js';
 import { TYPES, GROUPS, typeLabel, typeIcon, canHold, isPlace, buildTree } from '../core/types.js';
 
 // Zustand der geöffneten Kiste (Panels, nachgeladene Listen)
@@ -132,9 +133,11 @@ function boxHtml(p, { cachedAt } = {}) {
       <button class="btn${st.panel === 'move' ? ' primary' : ''}" data-act="panel" data-v="move">${icon('move')} Verschieben</button>
       <button class="btn${st.panel === 'rename' ? ' primary' : ''}" data-act="panel" data-v="rename">${icon('edit')} Umbenennen</button>
       <button class="btn${st.panel === 'type' ? ' primary' : ''}" data-act="panel" data-v="type">${icon(typeIcon(b.type))} Typ</button>
+      ${holds ? `<button class="btn" data-act="stow">${icon('scan')} Einräumen</button>` : ''}
     </div>
     ${p.items.length ? `<p class="muted small">${icon('takeout', 'inline')} nimmt einen Gegenstand heraus. Er bleibt im Verlauf und lässt sich zurücklegen.</p>` : ''}
     ${panelHtml(b)}
+    ${isPlace(b.type) ? '' : `<section class="card stack" id="lending">${lendHtml()}</section>`}
     ${holds && children.length ? `<section class="card">
       <div class="card-head"><h3>${isPlace(b.type) ? 'Hier steht' : 'Darin'}</h3><span class="muted small">${children.length}</span></div>
       ${children.map(childRow).join('')}
@@ -182,7 +185,8 @@ async function freeHtml(p, ctx) {
     .sort((x, y) => `${x.path} ${x.name}`.localeCompare(`${y.path} ${y.name}`, 'de'));
   const moving = store.moving();
   const last = store.lastPlace();
-  const pre = moving ? null : places.find(x => x.id === last?.id)?.id ?? null;
+  const stow = store.stow();
+  const pre = moving ? null : places.find(x => x.id === (stow?.id ?? last?.id))?.id ?? null;
   const label = t => esc(t.path ? `${t.path} › ${t.name}` : t.name);
   return `<form class="card stack" data-form="claim" data-code="${p.code}">
     ${head}
@@ -192,7 +196,7 @@ async function freeHtml(p, ctx) {
     <label class="field"><span>Wo ${canHold(claimState.type) && isPlace(claimState.type) ? 'ist es' : 'steht es'}?</span><select class="input" id="claimLoc">
       <option value="">Ganz oben, ohne Ort</option>
       ${places.map(t => `<option value="${t.id}"${t.id === pre ? ' selected' : ''}>${label(t)}</option>`).join('')}</select></label>
-    ${pre ? `<p class="muted small">Vorgeschlagen: zuletzt geöffnet.</p>` : ''}
+    ${pre ? `<p class="muted small">Vorgeschlagen: ${stow ? 'Ziel beim Einräumen' : 'zuletzt geöffnet'}.</p>` : ''}
     ${canHold(claimState.type) && !isPlace(claimState.type) ? `<label class="field"><span>Inhalt gleich erfassen (optional)</span>
       <textarea class="input" id="claimItems" rows="2" placeholder="Akkuschrauber, 2x Ladegerät"></textarea></label>` : ''}
     ${moving && canHold(claimState.type) ? `<p class="note">Danach kommt „${esc(moving.name)}“ hierhin.</p>` : ''}
@@ -459,6 +463,126 @@ async function afterChange(ctx) {
   await ctx.rerender();
 }
 
+// ---------- Ausleihen (Personen ohne App-Zugang; Erinnerung auf der Übersicht und als Kalendereintrag) ----------
+
+const lendState = { boxId: null, list: null, people: null, armedReturn: false };
+const dayText = s => (s ? s.split('-').reverse().join('.') : '');
+const openLending = () => lendState.list?.find(l => !l.returned_at) ?? null;
+
+function lendIcsFor(l, thingName) {
+  const who = l.borrowers?.name ?? 'jemandem';
+  return reminderIcs({
+    uid: l.id ?? crypto.randomUUID(),
+    date: l.remind_at,
+    title: `${thingName} zurückholen (bei ${who})`,
+    description: `Verliehen am ${fmtDay(l.lent_at ?? new Date().toISOString())} an ${who}.${l.note ? ' ' + l.note : ''} QRate`
+  });
+}
+
+function lendHtml() {
+  const b = st.current;
+  if (!b || isPlace(b.type)) return '';
+  if (!lendState.list) return '<p class="muted small">Ausleihen lädt …</p>';
+  const open = openLending();
+  const past = lendState.list.filter(l => l.returned_at);
+  const history = past.length ? `<h4 class="sub">Ausleih-Verlauf</h4><ul class="lend-history">${past.map(l =>
+    `<li><strong>${esc(l.borrowers?.name ?? 'Person gelöscht')}</strong> · ${fmtDay(l.lent_at)} bis ${fmtDay(l.returned_at)}</li>`).join('')}</ul>` : '';
+  if (open) {
+    const who = open.borrowers?.name ?? 'Person gelöscht';
+    const phone = open.borrowers?.phone;
+    const due = open.remind_at && open.remind_at <= inDays(0);
+    const sms = phone ? `sms:${encodeURIComponent(phone.replace(/\s/g, ''))}&body=${encodeURIComponent(`Hallo ${who}, hast du noch „${b.name}“? Ich bräuchte es bald zurück.`)}` : '';
+    return `<div class="card-head"><h3>Verliehen</h3>${due ? '<span class="pill warn">Erinnerung fällig</span>' : ''}</div>
+      <div class="lent-bar">${icon('people')}<span><strong>An ${esc(who)}</strong> seit ${fmtDay(open.lent_at)}
+        ${open.remind_at ? `<br>Erinnerung am ${dayText(open.remind_at)}` : ''}${open.note ? `<br>„${esc(open.note)}“` : ''}</span></div>
+      <div class="btn-row">
+        <button class="btn primary" data-act="lendReturn">${icon('undo')} Zurück erhalten</button>
+        <button class="btn" data-act="lendLater">In 1 Monat erinnern</button>
+        ${open.remind_at ? `<button class="btn" data-act="lendIcs">${icon('calendar')} Kalender</button>` : ''}
+        ${sms ? `<a class="btn" href="${esc(sms)}">${icon('message')} Nachricht</a>` : ''}
+      </div>${history}`;
+  }
+  if (st.panel !== 'lend') {
+    return `<div class="card-head"><h3>Ausleihen</h3></div>
+      <button class="btn" data-act="panel" data-v="lend">${icon('people')} Verleihen</button>${history}`;
+  }
+  const people = lendState.people ?? [];
+  return `<form class="stack" data-form="lendForm">
+    <div class="card-head"><h3>Verleihen</h3></div>
+    <label class="field"><span>An wen?</span><select class="input" id="lendWho">
+      <option value="">Neue Person …</option>
+      ${people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>
+    <div class="field-row" id="lendNew">
+      <label class="field"><span>Name der neuen Person</span><input class="input" id="lendName" maxlength="80" autocomplete="off"></label>
+      <label class="field"><span>Telefon (optional)</span><input class="input" id="lendPhone" type="tel" maxlength="40" autocomplete="off"></label>
+    </div>
+    <label class="field"><span>Erinnern am (leer = gar nicht)</span><input class="input" id="lendDate" type="date" value="${inDays(90)}"></label>
+    <div class="btn-row">${[[14, '2 Wochen'], [30, '1 Monat'], [90, '3 Monate']].map(([d, t]) =>
+      `<button type="button" class="btn small" data-act="lendIn" data-days="${d}">${t}</button>`).join('')}</div>
+    <label class="field"><span>Notiz (optional)</span><input class="input" id="lendNote" maxlength="500" placeholder="z. B. mit 2 Akkus"></label>
+    <label class="check"><input type="checkbox" id="lendCal" checked> Kalendereintrag mit Erinnerung herunterladen</label>
+    <p class="muted small">Name und Telefon sehen nur Mitglieder deines Haushalts. Löschen kannst du Personen unter „Haushalt“.</p>
+    <div class="btn-row"><button class="btn primary" type="submit">Verleihen</button>
+      <button class="btn ghost" type="button" data-act="panel" data-v="">Abbrechen</button></div>
+  </form>`;
+}
+
+function paintLending() {
+  const el = document.getElementById('lending');
+  if (el) el.innerHTML = lendHtml();
+}
+
+// Ein offenes Formular wird nicht überschrieben, solange nicht ausdrücklich neu gezeichnet werden soll
+async function fillLending(ctx, boxId, force = false) {
+  if (!document.getElementById('lending')) return;
+  if (lendState.boxId !== boxId) Object.assign(lendState, { boxId, list: null, people: null });
+  try {
+    const [list, people] = await Promise.all([api.boxLendings(boxId), api.borrowers(ctx.app.household)]);
+    if (st.boxId !== boxId) return;
+    Object.assign(lendState, { list, people });
+  } catch {
+    lendState.list = [];
+  }
+  if (force || !document.querySelector('#lending form')) paintLending();
+}
+
+const lendActions = {
+  lendIn(el) {
+    const f = document.getElementById('lendDate');
+    if (f) f.value = inDays(Number(el.dataset.days));
+  },
+  async lendReturn(_, ctx) {
+    await api.returnLending(openLending().id);
+    toast('Zurück erhalten');
+    await fillLending(ctx, st.boxId, true);
+  },
+  async lendLater(_, ctx) {
+    const date = inDays(30);
+    await api.remindLater(openLending().id, date);
+    toast(`Erinnerung am ${dayText(date)}`);
+    await fillLending(ctx, st.boxId, true);
+  },
+  lendIcs() {
+    downloadIcs(lendIcsFor(openLending(), st.current.name));
+  }
+};
+
+async function lendForm(f, ctx) {
+  let who = f.querySelector('#lendWho').value;
+  if (!who) {
+    const name = f.querySelector('#lendName').value.trim();
+    if (!name) { toast('Bitte eine Person wählen oder einen Namen eingeben'); return; }
+    who = (await api.addBorrower(ctx.app.household, name, f.querySelector('#lendPhone').value.trim())).id;
+  }
+  const date = f.querySelector('#lendDate').value || null;
+  const note = f.querySelector('#lendNote').value.trim() || null;
+  await api.lend(st.boxId, who, date, note);
+  st.panel = null;
+  await fillLending(ctx, st.boxId, true);
+  toast('Verliehen');
+  if (date && f.querySelector('#lendCal').checked) downloadIcs(lendIcsFor(openLending(), st.current.name));
+}
+
 // ---------- Aktionen der Ansicht ----------
 
 const boxActions = {
@@ -506,6 +630,11 @@ const boxActions = {
   claimType(el, ctx) {
     claimState.type = el.dataset.v || null;
     ctx.rerender();
+  },
+  stow(_, ctx) {
+    store.setStow({ id: st.current.id, name: st.current.name, done: [] });
+    st.panel = null;
+    ctx.go('scan');
   }
 };
 
@@ -532,7 +661,8 @@ const boxForms = {
     st.panel = null;
     await afterChange(ctx);
   },
-  claim
+  claim,
+  lendForm
 };
 
 const boxInput = {
@@ -598,14 +728,15 @@ export const resolveView = {
     }
     const moving = store.moving();
     if (moving && moving.id !== p.box.id && await finishMove(ctx, p.box)) return;
+    if (store.stow()) { await stowScanned(ctx, p.box); return; }
     store.cache(code, p);
     return showBox(ctx, p);
   },
   mounted(ctx) {
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
-    if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); }
+    if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); fillLending(ctx, st.current.id); }
   },
-  actions: { ...boxActions, ...photoActions, ...picActions },
+  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions },
   forms: boxForms,
   input: boxInput,
   change: { ...photoChange, ...picChange }
@@ -620,8 +751,8 @@ export const boxView = {
     st.code = p.box.code;
     return showBox(ctx, p);
   },
-  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); afterPaint(); },
-  actions: { ...boxActions, ...photoActions, ...picActions },
+  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); afterPaint(); fillLending(ctx, id); },
+  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions },
   forms: boxForms,
   input: boxInput,
   change: { ...photoChange, ...picChange }
@@ -646,6 +777,32 @@ async function claim(f, ctx) {
     ctx.go('box/' + moving.id);
     return;
   }
+  const stow = store.stow();
+  if (stow) {
+    stow.done.unshift({ name: name || typeLabel(type), from: null });
+    store.setStow(stow);
+    toast(`${typeLabel(type)} angelegt und eingeräumt`);
+    ctx.go('scan');
+    return;
+  }
   toast(`${typeLabel(type)} angelegt`);
   ctx.go('box/' + res.id);
+}
+
+// Einräumen: jedes gescannte Ding kommt ins Ziel, danach geht es direkt zurück zum Scannen
+async function stowScanned(ctx, thing) {
+  const stow = store.stow();
+  if (thing.id === stow.id) {
+    toast('Das ist das Ziel selbst');
+  } else {
+    try {
+      await api.moveBox(thing.id, stow.id);
+      stow.done.unshift({ name: thing.name, from: thing.parent?.name ?? null });
+      store.setStow(stow);
+      toast(`„${thing.name}“ eingeräumt`);
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
+  ctx.go('scan');
 }

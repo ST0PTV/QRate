@@ -32,6 +32,10 @@ export const store = {
   moving: () => read('moving', null),
   setMoving: m => write('moving', m),
 
+  // Einräumen: Ziel und was schon hineingekommen ist { id, name, done: [{ name, from }] }
+  stow: () => read('stow', null),
+  setStow: s => write('stow', s),
+
   // Zuletzt geöffneter Ort oder Behälter: Vorschlag beim Anlegen
   lastPlace: () => read('last_place', null),
   setLastPlace: p => write('last_place', p),
