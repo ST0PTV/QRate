@@ -295,7 +295,7 @@ test('Ausleihen: Person, Erinnerung, einmal gleichzeitig, Fremder sieht nichts',
     (await rpc('claim_label', { p_code: l.code, p_name: name, p_type: type }))[0].claim_label);
   const bohrer = await claim(a, 'Akkuschrauber', 'tool');
   const garage = await claim(b, 'Garage', 'room');
-  const [jonas] = await as(db, alex, ({ q }) => q(`insert into public.borrowers (household_id, name, phone) values ($1, 'Jonas', '0170 000000') returning id`, [house]));
+  const [jonas] = await as(db, alex, ({ q }) => q(`insert into public.borrowers (household_id, name, phone) values ($1, 'Jonas', 'Test-Nummer') returning id`, [house]));
   const lend = (user, boxId, borrower = jonas.id) => as(db, user, ({ q }) =>
     q(`insert into public.lendings (box_id, borrower_id, remind_at, note) values ($1, $2, current_date + 90, 'mit 2 Akkus') returning household_id, created_by, lent_at`, [boxId, borrower]));
 

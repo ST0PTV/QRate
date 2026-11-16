@@ -219,7 +219,7 @@ try {
   await page.getByRole('button', { name: 'Verleihen' }).click();
   await page.locator('#lendName').waitFor();
   await page.fill('#lendName', 'Jonas');
-  await page.fill('#lendPhone', '0170 1234567');
+  await page.fill('#lendPhone', 'Test-Nummer');
   await page.getByRole('button', { name: '2 Wochen' }).click();
   check((await page.inputValue('#lendDate')).length === 10, 'Schnellwahl setzt das Erinnerungsdatum');
   await page.fill('#lendDate', await page.evaluate(() => new Date().toLocaleDateString('sv-SE')));
