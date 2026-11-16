@@ -12,10 +12,14 @@ Dauer: etwa 20 Minuten. Kosten: die kostenlosen Stufen von Supabase und GitHub P
 
 Im Projekt unter **SQL Editor** nacheinander den Inhalt dieser Dateien einfügen und ausführen:
 
-1. `supabase/migrations/0001_schema.sql`
-2. `supabase/migrations/0002_functions.sql`
+1. `supabase/migrations/0001_schema.sql` – Tabellen, Regeln, Rechte
+2. `supabase/migrations/0002_functions.sql` – Funktionen für Scan, Etiketten, Einladungen, Suche
+3. `supabase/migrations/0003_photos.sql` – Fotos pro Kiste (privater Speicher `box-photos`)
+4. `supabase/migrations/0004_item_photos.sql` – ein Foto pro Gegenstand (PNG erlaubt)
+5. `supabase/migrations/0005_things.sql` – neutrale Etiketten, Typen, Dinge ineinander (übernimmt bestehende Orte)
+6. `supabase/migrations/0006_lending.sql` – Ausleihen mit Personen und Erinnerung
 
-Beide müssen ohne Fehler durchlaufen. Spätere Änderungen kommen als neue Dateien (`0003_…`) dazu und werden genauso ausgeführt.
+Alle müssen ohne Fehler durchlaufen, in dieser Reihenfolge. 0005 entfernt nach dem Umkopieren die alte Tabelle der Orte; Supabase warnt deshalb vor dem Ausführen. Am sichersten läuft eine Datei zwischen `begin;` und `commit;`. Spätere Änderungen kommen als neue Dateien dazu und werden genauso ausgeführt.
 
 ## 3. Anmeldung einstellen
 
