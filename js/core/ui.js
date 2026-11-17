@@ -99,14 +99,20 @@ export function applyTheme(mode) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#F2F2F7' : '#000000');
 }
 
+// Meldung unten. Mit action = { label, run } bekommt sie einen Knopf (z. B. „Rückgängig“) und bleibt länger stehen.
 let toastTimer;
-export function toast(msg, kind = '') {
+export function toast(msg, kind = '', action = null) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.className = 'toast' + (kind ? ' ' + kind : '') + (action ? ' has-act' : '');
+  if (action) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'toast-act', textContent: action.label });
+    b.addEventListener('click', () => { el.hidden = true; clearTimeout(toastTimer); action.run(); }, { once: true });
+    el.append(b);
+  }
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, kind === 'error' ? 4500 : 2600);
+  toastTimer = setTimeout(() => { el.hidden = true; }, action ? 6000 : kind === 'error' ? 4500 : 2600);
 }
 
 export function copyText(text) {

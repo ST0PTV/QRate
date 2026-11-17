@@ -46,6 +46,10 @@ const app = {
 
 let view = null;
 let renderSeq = 0;
+// Platzhalter beim Laden: Titel und zwei Karten in grau (Klasse loading, damit Tests darauf warten können)
+const SKELETON = '<div class="loading skeleton" role="status" aria-label="Lädt"><span class="sk sk-title"></span>'
+  + '<div class="sk-card"><span class="sk"></span><span class="sk sk-short"></span><span class="sk"></span></div>'
+  + '<div class="sk-card"><span class="sk"></span><span class="sk sk-short"></span></div></div>';
 let painted = false;
 
 const ctx = {
@@ -108,7 +112,7 @@ async function show({ keepScroll = false } = {}) {
     if (b.dataset.tab === view.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   painted = false;
-  const slow = setTimeout(() => { if (seq === renderSeq && !painted) main.innerHTML = '<p class="loading">Lädt …</p>'; }, 180);
+  const slow = setTimeout(() => { if (seq === renderSeq && !painted) main.innerHTML = SKELETON; }, 180);
   try {
     const html = await view.render(ctx, ...next.params);
     if (seq !== renderSeq) return; // inzwischen weiternavigiert

@@ -58,12 +58,7 @@ export default {
     const containers = boxes.filter(b => canHold(b.type) && !isPlace(b.type)).length;
 
     return `
-      <div class="stats">
-        <div class="stat"><span class="stat-n">${containers}</span><span class="muted">Behälter</span></div>
-        <div class="stat"><span class="stat-n">${items}</span><span class="muted">Gegenstände</span></div>
-        <a class="stat" href="#/etiketten"><span class="stat-n">${freeLabels}</span><span class="muted">freie Etiketten</span></a>
-      </div>
-      <a class="btn primary wide" href="#/scan">${icon('scan')} Etikett scannen</a>
+      <p class="summary">${containers} Behälter · ${items === 1 ? '1 Gegenstand' : `${items} Gegenstände`} · <a href="#/etiketten">${freeLabels === 1 ? '1 freies Etikett' : `${freeLabels} freie Etiketten`}</a></p>
       ${lent.length ? `<section class="card lent">
         <div class="card-head"><h3>Verliehen</h3><span class="muted small">${lent.length}</span></div>
         ${lent.map(l => {

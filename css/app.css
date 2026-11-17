@@ -106,6 +106,13 @@ code, .mono { font-family: var(--mono); font-size: .9em; }
 .ic.inline { width: 14px; height: 14px; vertical-align: -2px; margin-right: 2px; }
 .grow { flex: 1; min-width: 0; }
 .loading { color: var(--muted); padding: 24px 0; text-align: center; }
+/* Platzhalter in Form der Seite, solange Daten laden (statt „Lädt …“) */
+.skeleton { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; text-align: left; }
+.sk { display: block; height: 14px; border-radius: 7px; background: var(--fill); animation: sk-pulse 1.2s ease-in-out infinite alternate; }
+.sk-title { height: 26px; width: 55%; }
+.sk-short { width: 60%; }
+.sk-card { background: var(--surface); border-radius: var(--radius); padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+@keyframes sk-pulse { from { opacity: 1; } to { opacity: .45; } }
 
 /* Kopfzeile: großer Titel wie iOS, Zurück als runder Knopf */
 .top { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; align-items: center; gap: 12px; padding: calc(var(--safe-top) + 12px) 0 14px; margin-top: calc(-1 * var(--safe-top)); }
@@ -165,10 +172,9 @@ textarea.input { resize: vertical; min-height: 88px; }
 .big-tag.o { background: var(--label-ink); color: var(--label-bg); box-shadow: inset 0 0 0 2px var(--line); }
 
 /* Übersicht */
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.stat { background: var(--surface); border-radius: var(--radius); padding: 12px 6px; display: flex; flex-direction: column; align-items: center; text-align: center; text-decoration: none; }
-.stat-n { font: 700 22px/1.2 var(--font); font-variant-numeric: tabular-nums; }
-.stat .muted { font-size: 12px; }
+/* Übersicht: Zahlen als eine ruhige Zeile statt drei Kacheln */
+.summary { margin: 0 4px; color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.summary a { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .group-head { display: flex; align-items: center; gap: 10px; text-decoration: none; margin-bottom: 4px; }
 .row-ico { width: 40px; height: 40px; border-radius: 12px; background: var(--fill); color: var(--accent); display: grid; place-items: center; flex: none; }
 .row-ico.sm { width: 30px; height: 30px; border-radius: 9px; }
@@ -214,6 +220,7 @@ textarea.input { resize: vertical; min-height: 88px; }
   .item .qty { min-width: 0; }
   .item .item-pic { width: 40px; height: 40px; }
   .box-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .toolbar .tool { font-size: 11px; padding-inline: 0; }
 }
 .item-note { font-size: 13px; color: var(--muted); }
 .item .meta { font-size: 12px; color: var(--faint); }
@@ -325,14 +332,26 @@ textarea.input { resize: vertical; min-height: 88px; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px); z-index: 20; background: var(--surface-3); color: var(--text); padding: 12px 16px; border-radius: 14px; font-size: 15px; max-width: calc(100% - 32px); box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
 .toast { pointer-events: none; } /* Meldung ohne Knopf: Tipps gehen durch auf den Inhalt darunter */
+.toast.has-act { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding: 2px 6px 2px 16px; width: max-content; }
+.toast-act { appearance: none; border: 0; background: none; color: var(--accent); font: 600 15px var(--font); min-height: var(--tap-s); padding: 0 10px; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+.toast-act:active { opacity: .6; }
 .toast.error { box-shadow: inset 0 0 0 1px var(--danger), 0 8px 24px rgba(0, 0, 0, .25); }
 
+/* Knöpfe geben beim Drücken leicht nach */
+.btn, .icon-btn, .type-btn { transition: transform .12s ease, opacity .12s ease; }
+.btn:active, .icon-btn:active, .type-btn:active { transform: scale(.97); }
+/* Überschriften brechen ausgewogen um statt mit einem einzelnen Wort in der letzten Zeile */
+h1, h2, h3, .card-title { text-wrap: balance; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* Kiste: drei Aktionen in einer Reihe, Zeilen-Aktionen als Icons */
-.actions3 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.actions3 .btn { min-width: 0; padding: 0 6px; font-size: 15px; gap: 6px; white-space: nowrap; }
-@media (max-width: 430px) { .actions3 .btn .ic { display: none; } }
+/* Kistenseite: Werkzeugleiste unter dem Hauptknopf (Symbol über Text, wie Apple-Werkzeugleisten) */
+.toolbar { display: flex; background: var(--surface); border-radius: var(--radius); padding: 4px; }
+.tool { flex: 1 1 0; min-width: 0; appearance: none; border: 0; background: none; color: var(--accent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 64px; padding: 6px 2px; font: 500 12px/1.2 var(--font); border-radius: 10px; cursor: pointer; transition: transform .12s ease; }
+.tool span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .ic { width: 22px; height: 22px; }
+.tool:active { transform: scale(.97); }
+.tool.on { background: var(--tint-bg); }
 .item .icon-btn { width: 36px; height: 36px; }
 
 /* Typen, Pfad und Baum (neutrale Etiketten) */

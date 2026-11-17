@@ -42,7 +42,7 @@ async function newPage(as, query = '') {
   const page = shared;
   await page.goto(`${BASE}?as=${as}${query}`);
   await page.waitForFunction(() => window.__mockReady === true, null, { timeout: 30000 });
-  await page.waitForSelector('#main :not(.loading)');
+  await page.waitForSelector('#main > :not(.loading)');
   return page;
 }
 
@@ -116,6 +116,14 @@ try {
   await page.locator('#boxName').waitFor();
   await shot(page, 'kiste-umbenennen');
   await page.getByRole('button', { name: 'Abbrechen' }).click();
+
+  // Entnehmen mit „Rückgängig“ in der Meldung: Kabelbinder kommt zurück
+  await page.locator('[data-act="take"][data-name="Kabelbinder"]').click();
+  await page.locator('#toast .toast-act', { hasText: 'Rückgängig' }).waitFor();
+  await shot(page, 'entnommen-rueckgaengig');
+  await page.locator('#toast .toast-act').click();
+  await page.locator('#toast', { hasText: 'Zurückgelegt' }).waitFor();
+  check(await until(() => page.locator('.items .item:not(.removed) .item-name', { hasText: 'Kabelbinder' }).count().then(n => n === 1)), 'Rückgängig legt den Gegenstand zurück');
 
   await page.locator('[data-act="take"][data-name="Klinkenkabel"]').click();
   await page.locator('#toast', { hasText: 'Klinkenkabel“ entnommen' }).waitFor();
@@ -349,7 +357,7 @@ try {
 
   await page.goto(`${BASE}?as=alex`);
   await page.waitForFunction(() => window.__mockReady === true);
-  await page.waitForSelector('.stats');
+  await page.waitForSelector('.summary');
   check(await page.locator('.taken .row-title', { hasText: 'Klinkenkabel' }).isVisible(), 'Übersicht zeigt gerade entnommene Gegenstände');
   check(await page.locator('.tree .row-title', { hasText: 'Einbauschrank' }).isVisible(), 'Übersicht zeigt den Baum');
   await shot(page, 'uebersicht-hell');

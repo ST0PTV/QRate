@@ -133,6 +133,10 @@ export async function auditWords(p, where) {
         if (need > avail + 1) { out.push(`${where}: Wort „${w}“ braucht ${Math.round(need)} px, Platz ${Math.round(avail)} px`); break; }
       }
     }
+    // Kurze Beschriftungen (Werkzeugleiste) dürfen nicht mit „…“ gekürzt werden
+    for (const el of document.querySelectorAll('#main .tool span')) {
+      if (el.scrollWidth > el.clientWidth + 1) out.push(`${where}: Beschriftung „${el.textContent}“ wird gekürzt (${el.scrollWidth} > ${el.clientWidth} px)`);
+    }
     return out;
   }, where);
 }

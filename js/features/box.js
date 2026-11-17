@@ -22,6 +22,9 @@ function resetFor(boxId) {
 
 // ---------- Darstellung ----------
 
+// Knopf der Werkzeugleiste; ein offenes Feld (Verschieben, Umbenennen, Typ) ist markiert
+const toolBtn = (panel, label, ic) => `<button class="tool${st.panel === panel ? ' on' : ''}" data-act="panel" data-v="${panel}" aria-pressed="${st.panel === panel}">${icon(ic)}<span>${label}</span></button>`;
+
 function itemHtml(it) {
   if (st.panel === 'edit:' + it.id) {
     return `<form class="item editing" data-form="saveItem" data-id="${it.id}">
@@ -127,14 +130,13 @@ function boxHtml(p, { cachedAt } = {}) {
         <p class="muted small">${esc(typeLabel(b.type))}${crumbs ? '' : ' · ohne Ort'} · angelegt von ${esc(b.created_by_name)} am ${fmtDay(b.created_at)}</p>
       </div>
     </section>
-    <div class="actions3">
-      ${holds ? `<button class="btn${st.panel === 'add' ? ' primary' : ''}" data-act="panel" data-v="add">${icon('plus')} Hinzufügen</button>` : ''}
-      <button class="btn${st.panel === 'move' ? ' primary' : ''}" data-act="panel" data-v="move">${icon('move')} Verschieben</button>
-      <button class="btn${st.panel === 'rename' ? ' primary' : ''}" data-act="panel" data-v="rename">${icon('edit')} Umbenennen</button>
-      <button class="btn${st.panel === 'type' ? ' primary' : ''}" data-act="panel" data-v="type">${icon(typeIcon(b.type))} Typ</button>
-      ${holds ? `<button class="btn" data-act="stow">${icon('scan')} Einräumen</button>` : ''}
+    ${holds ? `<button class="btn primary wide" data-act="panel" data-v="add" aria-pressed="${st.panel === 'add'}">${icon('plus')} Hinzufügen</button>` : ''}
+    <div class="toolbar" role="group" aria-label="Weitere Aktionen">
+      ${toolBtn('move', 'Verschieben', 'move')}
+      ${toolBtn('rename', 'Umbenennen', 'edit')}
+      ${toolBtn('type', 'Typ', typeIcon(b.type))}
+      ${holds ? `<button class="tool" data-act="stow">${icon('scan')}<span>Einräumen</span></button>` : ''}
     </div>
-    ${p.items.length ? `<p class="muted small">${icon('takeout', 'inline')} nimmt einen Gegenstand heraus. Er bleibt im Verlauf und lässt sich zurücklegen.</p>` : ''}
     ${panelHtml(b)}
     ${isPlace(b.type) ? '' : `<section class="card stack" id="lending">${lendHtml()}</section>`}
     ${holds && children.length ? `<section class="card">
@@ -594,8 +596,18 @@ const boxActions = {
     if (st.panel === 'add') document.getElementById('quick')?.focus();
   },
   async take(el, ctx) {
-    await api.removeItem(el.dataset.id);
-    toast(`„${el.dataset.name}“ entnommen`);
+    const id = el.dataset.id;
+    await api.removeItem(id);
+    toast(`„${el.dataset.name}“ entnommen`, '', {
+      label: 'Rückgängig',
+      async run() {
+        try {
+          await api.restoreItem(id);
+          await afterChange(ctx);
+          toast('Zurückgelegt');
+        } catch (e) { toast(errorText(e), 'error'); }
+      }
+    });
     await afterChange(ctx);
   },
   async restore(el, ctx) {
