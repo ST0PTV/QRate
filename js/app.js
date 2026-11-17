@@ -300,5 +300,17 @@ if (isConfigured()) {
 boot();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  // Neue Version übernimmt: einmal neu laden, damit Seite, Skripte und Styles zusammenpassen.
+  // Nicht beim allerersten Besuch (da gab es noch keinen Service Worker) und nicht mitten im Tippen.
+  const hadWorker = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  const typing = () => [...document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea')]
+    .some(f => f.value !== f.defaultValue);
+  const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadWorker) return;
+    if (!typing()) reload();
+    else document.addEventListener('visibilitychange', () => { if (document.hidden) reload(); });
+  });
   navigator.serviceWorker.register('sw.js').catch(() => { /* ohne Offline-Cache weiter */ });
 }
