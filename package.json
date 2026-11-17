@@ -12,7 +12,8 @@
     "test:browser": "node tests/browser/check-flow.mjs",
     "serve": "node scripts/serve.mjs",
     "mock": "node scripts/serve.mjs --mock",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "vorab": "node scripts/vorab.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.14",

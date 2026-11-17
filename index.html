@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Sicherheitskopf: Skripte nur aus diesem Ordner, Daten nur von hier und vom Supabase-Projekt.
+       Supabase-Adresse muss zu js/core/config.js passen (npm run check prüft das). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://sstjypgcpxrlfyqezoky.supabase.co; connect-src 'self' https://sstjypgcpxrlfyqezoky.supabase.co; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>QRate</title>
   <meta name="description" content="QR-Etiketten für Kisten: scannen und sehen, was drin ist.">
   <meta name="theme-color" content="#000000">

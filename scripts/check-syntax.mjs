@@ -25,5 +25,22 @@ for (const f of listed) {
   if (f.includes('/') && !f.startsWith('qr-') && f !== './' && !shipped.includes(f)) { failed = true; console.error(`In PRECACHE, aber nicht vorhanden: ${f}`); }
 }
 
+// Sicherheitskopf: vorhanden, Skripte nur aus dem eigenen Ordner, Supabase-Adresse wie in config.js
+const html = readFileSync('index.html', 'utf8');
+const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
+const supa = readFileSync('js/core/config.js', 'utf8').match(/SUPABASE_URL:\s*'([^']*)'/)?.[1];
+if (!csp) { failed = true; console.error('index.html: Sicherheitskopf (Content-Security-Policy) fehlt'); }
+else {
+  const dir = name => csp.split(';').map(s => s.trim()).find(s => s.startsWith(name + ' ')) ?? '';
+  if (dir('script-src') !== "script-src 'self'") { failed = true; console.error(`Sicherheitskopf: script-src soll nur 'self' erlauben, ist: ${dir('script-src')}`); }
+  if (!dir('object-src').includes("'none'")) { failed = true; console.error("Sicherheitskopf: object-src 'none' fehlt"); }
+  if (supa) {
+    const origin = new URL(supa).origin;
+    for (const d of ['connect-src', 'img-src']) {
+      if (!dir(d).split(' ').includes(origin)) { failed = true; console.error(`Sicherheitskopf: ${d} erlaubt ${origin} nicht (Adresse aus config.js)`); }
+    }
+  }
+}
+
 if (failed) process.exit(1);
 console.log(`OK: ${js.length} Skripte, ${shipped.length} Dateien im Offline-Cache`);

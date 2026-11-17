@@ -50,8 +50,8 @@
   --seg-on: #FFFFFF;
   --line: #D8D8DC;
   --text: #000000;
-  --muted: #6C6C70;
-  --faint: #8A8A8E;
+  --muted: #5E5E63;
+  --faint: #6E6E73;
   --accent: #1C1F23;
   --on-accent: #FFFFFF;
   --free: #0B6BD0;
@@ -71,8 +71,8 @@
     --seg-on: #FFFFFF;
     --line: #D8D8DC;
     --text: #000000;
-    --muted: #6C6C70;
-    --faint: #8A8A8E;
+    --muted: #5E5E63;
+    --faint: #6E6E73;
     --accent: #1C1F23;
     --on-accent: #FFFFFF;
     --free: #0B6BD0;
@@ -131,7 +131,7 @@ code, .mono { font-family: var(--mono); font-size: .9em; }
 .btn.primary { background: var(--accent); color: var(--on-accent); }
 .btn.ghost { background: transparent; color: var(--muted); }
 .btn.danger { background: transparent; color: var(--danger); }
-.btn.small { min-height: 36px; padding: 0 14px; font-size: 15px; }
+.btn.small { min-height: var(--tap-s); padding: 0 14px; font-size: 15px; }
 .btn.wide { width: 100%; }
 .btn[disabled], .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
 .btn[aria-busy="true"] { opacity: .6; }
@@ -191,17 +191,30 @@ textarea.input { resize: vertical; min-height: 88px; }
 .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 15px; }
 .events li { display: flex; gap: 10px; }
 .events time { flex: none; width: 96px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.events a { text-decoration: none; }
+.events a { display: block; padding-block: 5px; margin-block: -5px; text-decoration: none; } /* Tippfläche ≥ 24 px ohne sichtbare Änderung */
 
 /* Kiste */
 .box-head, .claim-head { display: flex; gap: 14px; align-items: center; }
 .box-head h1 { font: 700 24px/1.15 var(--font); }
 .box-head a { text-decoration: none; }
 .items { display: flex; flex-direction: column; }
-.item { display: flex; align-items: center; gap: 10px; padding: 10px 0; min-height: 52px; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); flex-wrap: wrap; }
+/* Abstände knapp halten: lange Wörter wie „Verlängerungskabel“ sollen bei 390 px in eine Zeile passen */
+.item { display: flex; align-items: center; gap: 8px; padding: 10px 0; min-height: 52px; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); flex-wrap: wrap; }
 .item:first-child { border-top: 0; }
-.item .qty { font: 600 17px var(--font); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
-.item-name { font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
+.item .qty { font: 600 17px var(--font); min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.item-name { display: block; font-size: 16px; font-weight: 500; overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }
+/* Tipp auf Name und Zusatzzeilen öffnet „Bearbeiten“ (wie Listen bei Apple); kein eigener Stift-Knopf */
+.item-main { appearance: none; border: 0; background: none; padding: 4px 0; margin: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 44px; border-radius: 8px; }
+.item-main:active { opacity: .6; }
+.item-main > span { display: block; }
+.item .icon-btn.take { width: var(--tap-s); height: var(--tap-s); background: transparent; color: var(--muted); }
+.item .item-pic { width: 44px; height: 44px; }
+/* Schmale Handys (320 px): Etikett über dem Namen, kleineres Foto, damit nichts mitten im Wort umbricht */
+@media (max-width: 359px) {
+  .item .qty { min-width: 0; }
+  .item .item-pic { width: 40px; height: 40px; }
+  .box-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
 .item-note { font-size: 13px; color: var(--muted); }
 .item .meta { font-size: 12px; color: var(--faint); }
 .item.removed .item-name { text-decoration: line-through; color: var(--muted); }
@@ -250,14 +263,14 @@ textarea.input { resize: vertical; min-height: 88px; }
 /* Etiketten: Segment-Steuerung wie iOS */
 .seg-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .seg { display: inline-flex; background: var(--fill); border-radius: 9px; padding: 2px; }
-.seg button { border: 0; background: transparent; min-height: 32px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.seg button { border: 0; background: transparent; min-height: 40px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--seg-on); font-weight: 600; box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04); }
 .seg.seg-wide { display: flex; }
 .seg.seg-wide button { flex: 1; }
 .label-list { display: flex; flex-direction: column; }
 .label-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
 .label-row:first-child { border-top: 0; }
-.label-link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.label-link { display: flex; align-items: center; gap: 10px; padding-block: 8px; margin-block: -8px; text-decoration: none; } /* ganze Zeilenhöhe tippbar */
 .status { font-size: 13px; color: var(--muted); }
 .status.s-free { color: var(--free); }
 .status.s-active { color: var(--good); }
@@ -311,6 +324,7 @@ textarea.input { resize: vertical; min-height: 88px; }
 .tabs .tab-scan .ic { width: 28px; height: 28px; stroke-width: 2.2; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 16px); z-index: 20; background: var(--surface-3); color: var(--text); padding: 12px 16px; border-radius: 14px; font-size: 15px; max-width: calc(100% - 32px); box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.toast { pointer-events: none; } /* Meldung ohne Knopf: Tipps gehen durch auf den Inhalt darunter */
 .toast.error { box-shadow: inset 0 0 0 1px var(--danger), 0 8px 24px rgba(0, 0, 0, .25); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -339,7 +353,7 @@ textarea.input { resize: vertical; min-height: 88px; }
 .tree-row { display: flex; align-items: center; gap: 4px; padding-left: calc(var(--depth) * 18px); border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent); }
 .card-head + .tree-row { border-top: 0; }
 .tree-row .row-link { border-top: 0; min-width: 0; }
-.tree-toggle { width: 32px; height: var(--tap-s); flex: none; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.tree-toggle { width: var(--tap-s); height: var(--tap-s); flex: none; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
 .tree-toggle .ic { width: 18px; height: 18px; }
 
 /* Ausleihen und Einräumen */

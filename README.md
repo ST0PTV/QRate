@@ -30,7 +30,8 @@ npm install            # nur Test-Werkzeuge
 npm test               # Datenbank- und Funktionstests, ca. 3 s
 npm run check          # Syntax und Offline-Cache-Liste
 npm run mock           # App mit Test-Datenbank im Browser: http://localhost:8787/?as=alex
-npm run test:browser   # Klick-Durchlauf mit Screenshots (braucht: npm install --no-save playwright)
+npm run test:browser   # Klick-Durchlauf mit Screenshots, Kontrast, Tippflächen, 320 px (braucht: npm install --no-save playwright)
+npm run vorab          # vor jedem Commit: Tests, Check, Datenschutz; mit -- --browser auch der Durchlauf
 ```
 
 ## Lizenz

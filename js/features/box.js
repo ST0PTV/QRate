@@ -36,12 +36,11 @@ function itemHtml(it) {
   return `<div class="item">
     <span class="qty">${it.qty}×</span>
     ${picBtnHtml(it)}
-    <div class="grow">
-      <div class="item-name">${esc(it.name)}</div>
-      ${it.note ? `<div class="item-note">${esc(it.note)}</div>` : ''}
-      <div class="meta">${esc(it.by)} · ${fmtDay(it.created_at)}</div>
-    </div>
-    <button class="icon-btn" data-act="panel" data-v="edit:${it.id}" aria-label="${esc(it.name)} bearbeiten" title="Bearbeiten">${icon('edit')}</button>
+    <button type="button" class="item-main grow" data-act="panel" data-v="edit:${it.id}" aria-label="${esc(it.name)} bearbeiten">
+      <span class="item-name">${esc(it.name)}</span>
+      ${it.note ? `<span class="item-note">${esc(it.note)}</span>` : ''}
+      <span class="meta">${esc(it.by)} · ${fmtDay(it.created_at)}</span>
+    </button>
     <button class="icon-btn take" data-act="take" data-id="${it.id}" data-name="${esc(it.name)}" aria-label="${esc(it.name)} entnehmen" title="Entnehmen">${icon('takeout')}</button>
   </div>`;
 }

@@ -2,14 +2,17 @@
 // Aufruf: node tests/browser/check-flow.mjs [Ordner für Screenshots]
 // Screenshots landen außerhalb des Repos (Standard: Temp-Ordner), damit nichts versehentlich eingecheckt wird.
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { serve } from '../../scripts/serve.mjs';
-import { auditSpacing, auditFields } from './spacing.mjs';
+import { auditSpacing, auditFields, auditWords } from './spacing.mjs';
+import { auditContrast, auditTargets } from './a11y.mjs';
 
 const SHOTS = process.argv[2] || join(tmpdir(), 'qrate-shots');
 mkdirSync(SHOTS, { recursive: true });
+// alte Screenshots weg, damit keine Bilder eines früheren Laufs übrig bleiben
+for (const f of readdirSync(SHOTS)) if (f.endsWith('.png')) rmSync(join(SHOTS, f));
 const PORT = 8800 + Math.floor(Math.random() * 100);
 const server = await serve(PORT, { mock: true });
 const BASE = `http://localhost:${PORT}/`;
@@ -56,7 +59,21 @@ async function shot(page, name) {
   await page.screenshot({ path: file, fullPage: true });
   console.log(`  ${name}`);
   // Abstände und Felder nach den Regeln aus The Tracker
-  for (const x of [...await auditSpacing(page, name), ...await auditFields(page, name)]) check(false, x);
+  for (const x of [...await auditSpacing(page, name), ...await auditFields(page, name), ...await auditWords(page, name)]) check(false, x);
+  await auditA11y(page, name);
+}
+
+// Kontrast und Tippflächen; Hinweise (< 44 px) nach Elementart zählen und am Ende einmal ausgeben
+const hints = new Map();
+async function auditA11y(page, name) {
+  for (const x of await auditContrast(page, name)) check(false, x);
+  const t = await auditTargets(page, name);
+  for (const x of t.errors) check(false, x);
+  for (const x of new Set(t.hints)) {
+    const h = hints.get(x) ?? { n: 0, first: name };
+    h.n++;
+    hints.set(x, h);
+  }
 }
 
 const codes = async page => page.evaluate(() => window.__mockCodes);
@@ -90,7 +107,9 @@ try {
   await shot(page, 'kiste-hinzugefuegt');
 
   // Gegenstand bearbeiten und Kiste umbenennen: nur Ansicht für die Feld-Prüfung, dann abbrechen
-  await page.locator('[data-v^="edit:"]').first().click();
+  // Kein Stift-Knopf mehr: Tipp auf den Namen öffnet Bearbeiten
+  check(await page.locator('.item .icon-btn:not(.take)').count() === 0, 'Gegenstandszeile hat keinen eigenen Stift-Knopf');
+  await page.locator('.item .item-name').first().click();
   await page.locator('#ename').waitFor();
   await shot(page, 'gegenstand-bearbeiten');
   await page.getByRole('button', { name: 'Umbenennen' }).click();
@@ -335,14 +354,58 @@ try {
   check(await page.locator('.tree .row-title', { hasText: 'Einbauschrank' }).isVisible(), 'Übersicht zeigt den Baum');
   await shot(page, 'uebersicht-hell');
 
+  // ---------- Schmal: 320 px (iPhone SE 1. Generation), hell und dunkel, mit langem Namen tief im Baum ----------
+  console.log('Schmal');
+  await page.setViewportSize({ width: 320, height: 640 });
+  // alles aufklappen, dann das am tiefsten verschachtelte Ding nehmen
+  for (let i = 0; i < 10; i++) {
+    const closed = page.locator('.tree-toggle[aria-expanded="false"]');
+    if (!(await closed.count())) break;
+    await closed.first().click();
+    await settle(page);
+  }
+  const deep = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.tree-row')].map(r => ({ depth: Number(r.style.getPropertyValue('--depth')), href: r.querySelector('a.row-link').getAttribute('href') }));
+    rows.sort((a, b) => b.depth - a.depth);
+    return rows[0];
+  });
+  check(deep && deep.depth >= 2, `Baum hat mindestens drei Ebenen (tiefste: ${deep?.depth})`);
+  const deepId = deep.href.replace('#/box/', '');
+  const longName = 'Werkzeugkiste mit Ersatzteilen für Fahrrad und Anhänger';
+  await page.evaluate(async ([id, name]) => { const api = await import('/js/core/api.js'); await api.renameBox(id, name); }, [deepId, longName]);
+  for (const scheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const tag = scheme === 'light' ? 'hell' : 'dunkel';
+    for (const [route, name] of [['', 'uebersicht'], [`box/${deepId}`, 'tief'], ['suche', 'suche'], ['etiketten', 'etiketten'], ['haushalt', 'haushalt']]) {
+      await page.evaluate(r => { location.hash = '#/' + r; }, route);
+      await page.waitForFunction(r => location.hash === '#/' + r, route);
+      if (route === 'suche') {
+        await page.locator('#main input').first().fill('Fahrrad');
+        await page.locator('.row-title', { hasText: 'Werkzeugkiste' }).first().waitFor();
+      }
+      if (route.startsWith('box/')) await page.locator('.box-head', { hasText: 'Werkzeugkiste' }).waitFor();
+      await shot(page, `schmal-${tag}-${name}`);
+      // nichts darf breiter als der Bildschirm werden
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      check(wide <= 0, `schmal-${tag}-${name}: Seite ist ${wide} px breiter als 320 px`);
+    }
+  }
+
 } catch (e) {
   failures.push('Abbruch: ' + e.message.split('\n')[0]);
   console.log(e);
+  // Zustand beim Abbruch festhalten: Bild und sichtbare Meldung
+  try {
+    await shared?.screenshot({ path: join(SHOTS, 'abbruch.png'), fullPage: true });
+    const t = await shared?.locator('#toast:not([hidden])').innerText({ timeout: 500 }).catch(() => '');
+    if (t) console.log('Meldung beim Abbruch: ' + t);
+  } catch { /* Seite schon zu */ }
 } finally {
   await browser.close();
   server.close();
 }
 
+if (hints.size) console.log(`\nHinweise (unter 44 px, kein Fehler):\n- ` + [...hints].map(([h, v]) => `${h} – auf ${v.n} Seiten, zuerst: ${v.first}`).join('\n- '));
 console.log(`\nScreenshots: ${SHOTS}`);
 if (failures.length) {
   console.log(`\n${failures.length} Fehler:\n- ` + failures.join('\n- '));

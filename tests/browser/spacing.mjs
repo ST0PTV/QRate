@@ -115,3 +115,24 @@ export async function auditFields(p, where) {
   await p.evaluate(() => document.querySelectorAll('.toast').forEach((t) => { t.style.visibility = ''; }));
   return out;
 }
+
+// Wörter, die nicht in ihre Zeile passen und deshalb mitten im Wort umbrechen (gefunden bei 320 px: „Hochze/itsalbu/m“).
+// Gemessen wird das längste Wort mit der Schrift des Elements gegen die verfügbare Breite.
+export async function auditWords(p, where) {
+  return p.evaluate((where) => {
+    const out = [];
+    const ctx = document.createElement('canvas').getContext('2d');
+    for (const el of document.querySelectorAll('#main .item-name, #main .box-head h1, #main .events li > span, #main .events li > a, #main .crumb')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width) continue;
+      const cs = getComputedStyle(el);
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const avail = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      for (const w of el.textContent.split(/[\s/–-]+/)) {
+        const need = ctx.measureText(w).width;
+        if (need > avail + 1) { out.push(`${where}: Wort „${w}“ braucht ${Math.round(need)} px, Platz ${Math.round(avail)} px`); break; }
+      }
+    }
+    return out;
+  }, where);
+}

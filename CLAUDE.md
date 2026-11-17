@@ -9,4 +9,4 @@
 - Neue Datei in `js/`, `css/`, `vendor/` oder `icons/` → in `PRECACHE` von `sw.js` eintragen und `CACHE_VERSION` erhöhen (`npm run check` prüft das).
 - Neue Abfrage in `api.js` → dieselbe Funktion in `tests/browser/mock-api.js` nachbauen.
 - Farben nur über Tokens in `css/app.css`. Eigene Strich-Icons in `js/core/ui.js`, keine Emoji.
-- Vor dem Commit: `npm test && npm run check`. Vor Release zusätzlich `npm run test:browser` und die Screenshots ansehen.
+- Vor dem Commit: `npm run vorab` (Tests, Check, Datenschutz) und nur bei „VORABCHECK BESTANDEN“ committen. Vor Release `npm run vorab -- --browser` und die Screenshots ansehen (hell, dunkel, 320 px).

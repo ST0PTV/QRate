@@ -112,7 +112,10 @@ async function show({ keepScroll = false } = {}) {
   try {
     const html = await view.render(ctx, ...next.params);
     if (seq !== renderSeq) return; // inzwischen weiternavigiert
+    // Beim Neuzeichnen derselben Seite bleiben Eingaben erhalten, die noch nicht abgeschickt sind
+    const typed = keepScroll ? typedValues() : [];
     if (typeof html === 'string') main.innerHTML = html;
+    restoreValues(typed);
     view.mounted?.(ctx, ...next.params);
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (e) {
@@ -121,6 +124,30 @@ async function show({ keepScroll = false } = {}) {
     main.innerHTML = `<div class="card empty"><p>${esc(errorText(e))}</p><button class="btn" data-global="retry">Erneut versuchen</button></div>`;
   } finally {
     clearTimeout(slow);
+  }
+}
+
+// Eingetippte Werte (Feld mit id, vom Ausgangswert abweichend). Felder des Formulars, das gerade
+// abgeschickt wird, zählen nicht: nach dem Speichern soll es leer neu erscheinen.
+let submitting = null;
+const isChoice = el => el.type === 'checkbox' || el.type === 'radio';
+function typedValues() {
+  return [...main.querySelectorAll('input[id], select[id], textarea[id]')]
+    .filter(el => el.type !== 'file' && !(submitting && el.closest('form')?.dataset.form === submitting))
+    .filter(el => isChoice(el) ? el.checked !== el.defaultChecked
+      : el.tagName === 'SELECT' ? [...el.options].some(o => o.selected !== o.defaultSelected)
+      : el.value !== el.defaultValue)
+    .map(el => ({ id: el.id, tag: el.tagName, type: el.type, value: el.value, checked: el.checked, start: startOf(el) }));
+}
+// Ausgangswert: nur übernehmen, wenn das neue Feld genauso beginnt (nicht von Gegenstand A nach B)
+const startOf = el => isChoice(el) ? el.defaultChecked
+  : el.tagName === 'SELECT' ? [...el.options].filter(o => o.defaultSelected).map(o => o.value).join('|')
+  : el.defaultValue;
+function restoreValues(list) {
+  for (const v of list) {
+    const el = main.querySelector(`#${CSS.escape(v.id)}`);
+    if (!el || el.tagName !== v.tag || el.type !== v.type || startOf(el) !== v.start) continue;
+    if (isChoice(el)) el.checked = v.checked; else el.value = v.value;
   }
 }
 
@@ -137,7 +164,12 @@ main.addEventListener('submit', async e => {
   const f = e.target.closest('form[data-form]');
   if (!f || !view?.forms?.[f.dataset.form]) return;
   e.preventDefault();
-  await guard(() => view.forms[f.dataset.form](f, ctx), f.querySelector('button[type=submit], button:not([type])'));
+  submitting = f.dataset.form;
+  try {
+    await guard(() => view.forms[f.dataset.form](f, ctx), f.querySelector('button[type=submit], button:not([type])'));
+  } finally {
+    if (submitting === f.dataset.form) submitting = null;
+  }
 });
 main.addEventListener('input', e => view?.input?.[e.target.id]?.(e.target, ctx));
 main.addEventListener('change', e => view?.change?.[e.target.id]?.(e.target, ctx));

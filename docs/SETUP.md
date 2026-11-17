@@ -55,6 +55,8 @@ SUPABASE_ANON_KEY: '…',
 APP_URL: 'https://st0ptv.github.io/QRate/'
 ```
 
+Dieselbe *Project URL* in `index.html` im Sicherheitskopf (`Content-Security-Policy`) bei `img-src` und `connect-src` eintragen. Sonst blockiert der Browser die Verbindung zu Supabase. `npm run check` meldet, wenn beide Adressen nicht zusammenpassen.
+
 Der öffentliche Schlüssel darf ins Repo, er ist für Browser gedacht. Geschützt sind die Daten über die Policies aus Schritt 2. Den *service_role*- bzw. *secret*-Schlüssel nie eintragen.
 
 **`APP_URL` vor dem ersten Etikettendruck festlegen.** Diese Adresse steht in jedem QR-Code. Wird sie später geändert, funktionieren gedruckte Etiketten nicht mehr.

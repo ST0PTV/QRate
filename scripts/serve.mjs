@@ -5,6 +5,18 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
+import { createHash } from 'node:crypto';
+
+// Testumgebung: Import-Map auf die PGlite-Schnittstelle. Der Sicherheitskopf der echten Seite bleibt,
+// er erlaubt zusätzlich genau diese Import-Map (Hash) und WebAssembly für PGlite.
+const IMPORTMAP = '{"imports":{"/js/core/api.js":"/tests/browser/mock-api.js","/js/core/config.js":"/tests/browser/mock-config.js"}}';
+const IMPORTMAP_HASH = createHash('sha256').update(IMPORTMAP).digest('base64');
+export function mockHtml(html) {
+  if (!html.includes("script-src 'self';")) throw new Error('Sicherheitskopf in index.html nicht gefunden');
+  return html
+    .replace("script-src 'self';", `script-src 'self' 'sha256-${IMPORTMAP_HASH}' 'wasm-unsafe-eval';`)
+    .replace('<head>', `<head>\n  <script type="importmap">${IMPORTMAP}</script>`);
+}
 
 const ROOT = join(import.meta.dirname, '..');
 const PORT = Number(process.env.PORT || 8787);
@@ -22,8 +34,7 @@ export function serve(port = PORT, { mock = false } = {}) {
       if (path.includes('..')) throw new Error('verboten');
       // Testumgebung: die echte index.html mit Import-Map auf die PGlite-Schnittstelle (nur mit mock: true)
       if (mock && (path === '' || path === 'index.html')) {
-        const html = (await readFile(join(ROOT, 'index.html'), 'utf8')).replace('<head>', `<head>
-  <script type="importmap">{"imports":{"/js/core/api.js":"/tests/browser/mock-api.js","/js/core/config.js":"/tests/browser/mock-config.js"}}</script>`);
+        const html = mockHtml(await readFile(join(ROOT, 'index.html'), 'utf8'));
         res.writeHead(200, { 'content-type': TYPES['.html'], 'cache-control': 'no-store' });
         res.end(html);
         return;
