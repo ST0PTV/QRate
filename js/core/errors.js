@@ -12,6 +12,7 @@ const ERRORS = {
   cycle: 'Das geht nicht: Es würde in sich selbst stecken.',
   parent_single: 'In ein Einzelstück kann nichts hinein.',
   type_needs_parent: 'Erst einen Ort wählen: Der Inhalt braucht einen Platz.',
+  already_returned: 'Diese Ausleihe ist schon zurückgegeben.',
   photo_limit: 'Höchstens 8 Fotos pro Kiste.',
   clipboard_unavailable: 'Dieser Browser gibt die Zwischenablage nicht frei. Bitte in das Feld tippen, lange drücken und „Einfügen“ wählen.',
   clipboard_empty: 'In der Zwischenablage ist kein Bild. Erst lange auf den Gegenstand drücken und „Auswahl kopieren“ wählen.',

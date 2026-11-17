@@ -125,8 +125,14 @@ export async function setItemPhoto(householdId, boxId, itemId, blob, cutout) {
   const path = `${householdId}/${boxId}/items/${crypto.randomUUID()}.${png ? 'png' : 'jpg'}`;
   await run(sb.storage.from(PHOTOS).upload(path, blob, { contentType: png ? 'image/png' : 'image/jpeg' }));
   try {
-    const old = await run(sb.from('item_photos').delete().eq('item_id', itemId).select('path'));
-    await run(sb.from('item_photos').insert({ item_id: itemId, path, cutout }));
+    // Pro Gegenstand ein Foto: alte Zeile weg, neue rein. Klappt das Neue nicht, kommt das Alte zurück.
+    const old = await run(sb.from('item_photos').delete().eq('item_id', itemId).select('path, cutout'));
+    try {
+      await run(sb.from('item_photos').insert({ item_id: itemId, path, cutout }));
+    } catch (e) {
+      if (old.length) await sb.from('item_photos').insert({ item_id: itemId, path: old[0].path, cutout: old[0].cutout });
+      throw e;
+    }
     if (old.length) await sb.storage.from(PHOTOS).remove(old.map(o => o.path));
   } catch (e) {
     await sb.storage.from(PHOTOS).remove([path]);
@@ -156,4 +162,22 @@ export const returnLending = id => run(sb.from('lendings').update({ returned_at:
 export const remindLater = (id, remindAt) => run(sb.from('lendings').update({ remind_at: remindAt }).eq('id', id));
 
 // ---------- Suche ----------
+// ---------- Sicherung ----------
+// Tabellen, die in die Sicherungsdatei kommen (Fotos nur als Pfad, die Bilder selbst nicht)
+export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'borrowers', 'lendings', 'members'];
+const KEY = t => (t === 'labels' ? 'code' : 'id'); // Sortierung für seitenweises Lesen
+async function allRows(table, h) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const page = await run(sb.from(table).select('*').eq('household_id', h).order(KEY(table)).range(from, from + 999));
+    out.push(...page);
+    if (page.length < 1000) return out;
+  }
+}
+export async function exportHousehold(h) {
+  const data = {};
+  for (const t of EXPORT_TABLES) data[t] = await allRows(t, h);
+  return data;
+}
+
 export const search = (h, q) => rpc('search', { p_household: h, p_q: q });

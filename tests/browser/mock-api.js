@@ -218,6 +218,13 @@ export async function deleteItemPhoto(photo) {
 }
 
 // Ausleihen
+export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'borrowers', 'lendings', 'members'];
+const KEY = t => (t === 'labels' ? 'code' : 'id'); // Sortierung für seitenweises Lesen
+export async function exportHousehold(h) {
+  const data = {};
+  for (const t of EXPORT_TABLES) data[t] = await q(`select * from public.${t} where household_id = $1 order by ${KEY(t)}`, [h]);
+  return data;
+}
 export const borrowers = h => q('select id, name, phone from public.borrowers where household_id = $1 order by name', [h]);
 export const addBorrower = (h, name, phone) =>
   one('insert into public.borrowers (household_id, name, phone) values ($1, $2, $3) returning id, name, phone', [h, name, phone || null]);

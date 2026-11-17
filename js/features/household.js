@@ -1,9 +1,9 @@
 // Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Darstellung, Haushalt wechseln, Abmelden.
 import { CONFIG } from '../core/config.js';
-import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower } from '../core/api.js';
+import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower, exportHousehold } from '../core/api.js';
 import { inviteUrl } from '../core/code.js';
 import { store } from '../core/store.js';
-import { esc, qrSvg, toast, copyText, fmtTime, applyTheme } from '../core/ui.js';
+import { esc, qrSvg, toast, copyText, fmtTime, applyTheme, downloadText } from '../core/ui.js';
 
 let invite = null;      // { token, expires_at }
 let armed = null;       // Mitglied, dessen Entfernen auf Bestätigung wartet
@@ -58,6 +58,11 @@ export default {
         </div>`).join('')}
       </section>` : ''}
       <section class="card stack">
+        <h3>Sicherung</h3>
+        <p class="muted small">Alle Dinge, Gegenstände, Etiketten, Ausleihen und der Verlauf als Datei. Fotos sind nicht enthalten.</p>
+        <button class="btn" data-act="backup">Sicherung herunterladen</button>
+      </section>
+      <section class="card stack">
         <h3>Darstellung</h3>
         <div class="seg seg-wide" role="group" aria-label="Darstellung">
           ${THEMES.map(([v, label]) => `<button type="button" data-act="theme" data-v="${v}" aria-pressed="${store.theme() === v}">${label}</button>`).join('')}
@@ -101,6 +106,13 @@ export default {
       armed = null;
       await setMemberStatus(el.dataset.id, 'remove');
       await refreshNames(ctx);
+    },
+    async backup(_, ctx) {
+      const data = await exportHousehold(ctx.app.household);
+      const file = { app: 'qrate', schemaVersion: 7, exportedAt: new Date().toISOString(), household: ctx.app.membership.households?.name ?? null, data };
+      downloadText(`qrate-sicherung-${new Date().toISOString().slice(0, 10)}.json`, 'application/json', JSON.stringify(file, null, 1));
+      const n = data.boxes.length + data.items.length;
+      toast(`Sicherung erstellt: ${n} Einträge`);
     },
     toggleRename(_, ctx) { renaming = !renaming; ctx.rerender(); },
     theme(el, ctx) {

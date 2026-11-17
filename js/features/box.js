@@ -570,14 +570,22 @@ const lendActions = {
 
 async function lendForm(f, ctx) {
   let who = f.querySelector('#lendWho').value;
+  let added = false;
   if (!who) {
     const name = f.querySelector('#lendName').value.trim();
     if (!name) { toast('Bitte eine Person wählen oder einen Namen eingeben'); return; }
     who = (await api.addBorrower(ctx.app.household, name, f.querySelector('#lendPhone').value.trim())).id;
+    added = true;
   }
   const date = f.querySelector('#lendDate').value || null;
   const note = f.querySelector('#lendNote').value.trim() || null;
-  await api.lend(st.boxId, who, date, note);
+  try {
+    await api.lend(st.boxId, who, date, note);
+  } catch (e) {
+    // Neu angelegte Person wieder entfernen, sonst entsteht bei jedem Versuch eine doppelte
+    if (added) await api.deleteBorrower(who).catch(() => {});
+    throw e;
+  }
   st.panel = null;
   await fillLending(ctx, st.boxId, true);
   toast('Verliehen');
@@ -733,17 +741,21 @@ export const resolveView = {
     }
     if (p.status === 'signed_out') { store.setPendingCode(code); await ctx.reloadSession(); return; }
     if (p.status === 'denied') { ctx.setTitle('Kein Zugriff', '', true); return deniedHtml(); }
+    await ctx.useHousehold(p.box?.household_id ?? p.household_id);
     if (p.status === 'free') {
       ctx.setTitle(humanNumber(p.kind, p.number), 'Freies Etikett', true);
       return freeHtml(p, ctx);
     }
+    // Verschieben und Einräumen nur bei einem echten Scan, nicht beim Öffnen über Liste oder Link
+    const scanned = ctx.fromScan(code);
     const moving = store.moving();
-    if (moving && moving.id !== p.box.id && await finishMove(ctx, p.box)) return;
-    if (store.stow()) { await stowScanned(ctx, p.box); return; }
+    if (scanned && moving && moving.id !== p.box.id && await finishMove(ctx, p.box)) return;
+    if (scanned && store.stow()) { await stowScanned(ctx, p.box); return; }
     store.cache(code, p);
     return showBox(ctx, p);
   },
   mounted(ctx) {
+    picCtx = ctx; // auch Einfügen ins Feld ohne vorherigen Knopf speichert
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
     if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); fillLending(ctx, st.current.id); }
   },
@@ -759,10 +771,11 @@ export const boxView = {
   async render(ctx, id) {
     const p = await loadBox(id);
     if (!p) { ctx.setTitle('Kein Zugriff', '', true); return deniedHtml(); }
+    await ctx.useHousehold(p.box.household_id);
     st.code = p.box.code;
     return showBox(ctx, p);
   },
-  mounted(ctx, id) { fillEvents(ctx, id); fillPhotos(id); afterPaint(); fillLending(ctx, id); },
+  mounted(ctx, id) { picCtx = ctx; fillEvents(ctx, id); fillPhotos(id); afterPaint(); fillLending(ctx, id); },
   actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions },
   forms: boxForms,
   input: boxInput,
@@ -778,8 +791,12 @@ async function claim(f, ctx) {
   const parent = f.querySelector('#claimLoc')?.value || null;
   const items = parseQuick(f.querySelector('#claimItems')?.value ?? '');
   const res = await api.claim(code, name, type, parent);
-  if (items.length) await api.addItems(res.id, items);
   claimState.code = null;
+  if (items.length) {
+    // Das Ding existiert schon; scheitern nur die Gegenstände, trotzdem hin und Fehler zeigen
+    try { await api.addItems(res.id, items); }
+    catch (e) { toast(`Angelegt, aber Inhalt nicht gespeichert: ${errorText(e)}`, 'error'); ctx.go('box/' + res.id); return; }
+  }
   const moving = store.moving();
   if (moving && canHold(type)) {
     store.setMoving(null);

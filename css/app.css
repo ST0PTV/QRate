@@ -154,6 +154,10 @@ code, .mono { font-family: var(--mono); font-size: .9em; }
 .input { width: 100%; min-width: 0; min-height: var(--tap); background: var(--fill); border: 1px solid transparent; border-radius: 12px; padding: 10px 14px; color: var(--text); font-size: 17px; }
 .input:focus { border-color: var(--accent); outline: none; }
 .input::placeholder { color: var(--faint); }
+/* Datumsfeld auf dem iPhone: Wert links und senkrecht mittig, Feld ragt nicht aus der Karte (aus The Tracker, dort auf dem iPhone geprüft) */
+input[type="date"].input { display: flex; align-items: center; -webkit-appearance: none; appearance: none; text-align: left; min-width: 0; max-width: 100%; min-inline-size: 0; line-height: normal; padding-top: 0; padding-bottom: 0; }
+input[type="date"].input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
+input[type="date"].input::-webkit-datetime-edit { padding: 0; }
 textarea.input { resize: vertical; min-height: 88px; }
 .input.search { margin-bottom: 4px; }
 .code-input { font: 600 24px var(--mono); letter-spacing: .3em; text-align: center; }

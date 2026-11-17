@@ -1,5 +1,6 @@
 // Prüft die Syntax aller JS-Dateien und ob sw.js jede ausgelieferte Datei im PRECACHE führt.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -23,6 +24,30 @@ for (const f of shipped) {
 }
 for (const f of listed) {
   if (f.includes('/') && !f.startsWith('qr-') && f !== './' && !shipped.includes(f)) { failed = true; console.error(`In PRECACHE, aber nicht vorhanden: ${f}`); }
+}
+
+// Geänderte Dateien brauchen eine neue CACHE_VERSION, sonst laden iPhones alte und neue Module gemischt.
+// sw.js führt dazu eine Zeile „// Inhalt: <Prüfsumme>“. Ändert sich eine ausgelieferte Datei, schlägt der Check an.
+// Abhilfe: CACHE_VERSION erhöhen, dann `npm run check -- --fix` (trägt die neue Prüfsumme ein).
+const digest = createHash('sha256');
+for (const f of [...shipped].sort()) digest.update(f + '\0').update(readFileSync(f)).update('\0');
+const hash = digest.digest('hex').slice(0, 16);
+const version = sw.match(/CACHE_VERSION = '([^']+)'/)?.[1];
+const stored = sw.match(/^\/\/ Inhalt: ([0-9a-f]+)$/m)?.[1];
+if (process.argv.includes('--fix')) {
+  let before = null;
+  try { before = execFileSync('git', ['show', 'HEAD:sw.js'], { encoding: 'utf8' }).match(/CACHE_VERSION = '([^']+)'/)?.[1]; } catch { /* kein Git */ }
+  if (stored !== hash && before === version) {
+    failed = true;
+    console.error(`Erst CACHE_VERSION in sw.js erhöhen (steht noch auf ${version} wie im letzten Commit).`);
+  } else if (stored !== hash) {
+    const next = stored ? sw.replace(/^\/\/ Inhalt: [0-9a-f]+$/m, `// Inhalt: ${hash}`) : sw.replace(/^(const CACHE_VERSION = .*)$/m, `$1\n// Inhalt: ${hash}`);
+    writeFileSync('sw.js', next);
+    console.log(`Prüfsumme in sw.js eingetragen: ${hash} (${version})`);
+  }
+} else if (stored !== hash) {
+  failed = true;
+  console.error(`Ausgelieferte Dateien haben sich geändert (Prüfsumme ${hash}, in sw.js ${stored ?? 'keine'}): CACHE_VERSION erhöhen, dann npm run check -- --fix`);
 }
 
 // Sicherheitskopf: vorhanden, Skripte nur aus dem eigenen Ordner, Supabase-Adresse wie in config.js

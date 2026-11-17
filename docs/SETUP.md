@@ -18,6 +18,7 @@ Im Projekt unter **SQL Editor** nacheinander den Inhalt dieser Dateien einfügen
 4. `supabase/migrations/0004_item_photos.sql` – ein Foto pro Gegenstand (PNG erlaubt)
 5. `supabase/migrations/0005_things.sql` – neutrale Etiketten, Typen, Dinge ineinander (übernimmt bestehende Orte)
 6. `supabase/migrations/0006_lending.sql` – Ausleihen mit Personen und Erinnerung
+7. `supabase/migrations/0007_lending_privacy.sql` – gelöschte Personen verschwinden auch aus dem Verlauf; Rückgaben lassen sich nicht wieder öffnen
 
 Alle müssen ohne Fehler durchlaufen, in dieser Reihenfolge. 0005 entfernt nach dem Umkopieren die alte Tabelle der Orte; Supabase warnt deshalb vor dem Ausführen. Am sichersten läuft eine Datei zwischen `begin;` und `commit;`. Spätere Änderungen kommen als neue Dateien dazu und werden genauso ausgeführt.
 

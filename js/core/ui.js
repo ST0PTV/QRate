@@ -99,6 +99,16 @@ export function applyTheme(mode) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#F2F2F7' : '#000000');
 }
 
+// Text als Datei herunterladen (z. B. Sicherung)
+export function downloadText(filename, mime, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 // Meldung unten. Mit action = { label, run } bekommt sie einen Knopf (z. B. „Rückgängig“) und bleibt länger stehen.
 let toastTimer;
 export function toast(msg, kind = '', action = null) {

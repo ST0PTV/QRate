@@ -1,6 +1,7 @@
 // Offline-Cache für die App-Hülle. Daten von Supabase (anderer Ursprung) gehen nie durch den Cache.
 // Neue Datei → hier eintragen und CACHE_VERSION erhöhen (npm run check prüft das).
-const CACHE_VERSION = 'qr-0.2.0-6';
+const CACHE_VERSION = 'qr-0.2.0-7';
+// Inhalt: f4d522ad4e17acc0
 const PRECACHE = [
   './',
   'index.html',
@@ -44,14 +45,17 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
+// Nur im eigenen Cache suchen: andere Apps auf derselben Adresse (st0ptv.github.io) haben eigene Caches
+const own = req => caches.open(CACHE_VERSION).then(c => c.match(req));
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
   // Seitenaufrufe (auch mit ?k=…): erst Netz, dann Cache – so kommen Updates sofort an
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('index.html')));
+    e.respondWith(fetch(req).catch(() => own('index.html')));
     return;
   }
-  e.respondWith(caches.match(req).then(hit => hit || fetch(req)));
+  e.respondWith(own(req).then(hit => hit || fetch(req)));
 });

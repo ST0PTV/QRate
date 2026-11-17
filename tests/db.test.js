@@ -324,9 +324,27 @@ test('Ausleihen: Person, Erinnerung, einmal gleichzeitig, Fremder sieht nichts',
   assert.deepEqual([back[0].action, back[0].detail.from], ['returned', 'Jonas']);
   await lend(alex, bohrer.id);
 
+  // Zurückgegeben bleibt zurückgegeben: nicht wieder öffnen, nicht umdatieren; Rückgabezeit vom Server
+  await rejects(as(db, alex, ({ q }) => q('update public.lendings set returned_at = null where box_id = $1 and returned_at is not null', [bohrer.id])), 'already_returned');
+  await rejects(as(db, alex, ({ q }) => q(`update public.lendings set returned_at = now() - interval '9 days' where box_id = $1 and returned_at is not null`, [bohrer.id])), 'already_returned');
+
+  // Ein Eintrag wie vor 0007 (ohne Personen-ID) muss beim Löschen ebenfalls seinen Namen verlieren
+  await db.query(`update public.events set detail = detail - 'borrower' where box_id = $1 and action = 'lent'`, [bohrer.id]);
+  // Andere Person mit Ausleihe: ihr Name bleibt
+  const [mia] = await as(db, alex, ({ q }) => q(`insert into public.borrowers (household_id, name) values ($1, 'Mia') returning id`, [house]));
+  await as(db, alex, ({ q }) => q('update public.lendings set returned_at = now() where box_id = $1 and returned_at is null', [bohrer.id]));
+  await lend(alex, bohrer.id, mia.id);
+
+  // Fremder kann die Person nicht löschen, Namen bleiben
+  assert.equal((await as(db, fremd, ({ q }) => q('delete from public.borrowers where id = $1 returning id', [jonas.id]))).length, 0);
+
   // Person löschen: Verlauf bleibt, ohne Namen
   await as(db, alex, ({ q }) => q('delete from public.borrowers where id = $1', [jonas.id]));
-  const hist = await as(db, alex, ({ q }) => q('select borrower_id from public.lendings where box_id = $1', [bohrer.id]));
-  assert.equal(hist.length, 2);
-  assert.ok(hist.every(h => h.borrower_id === null));
+  const hist = await as(db, alex, ({ q }) => q('select borrower_id from public.lendings where box_id = $1 order by lent_at', [bohrer.id]));
+  assert.equal(hist.length, 3);
+  assert.ok(hist.slice(0, 2).every(h => h.borrower_id === null));
+  const evs = await as(db, alex, ({ q }) => q(`select action, detail from public.events where box_id = $1 and action in ('lent', 'returned')`, [bohrer.id]));
+  assert.ok(evs.length >= 5);
+  assert.ok(!JSON.stringify(evs).includes('Jonas'), 'Name der gelöschten Person steht nicht mehr im Verlauf');
+  assert.ok(JSON.stringify(evs).includes('Mia'), 'Andere Personen bleiben im Verlauf');
 });

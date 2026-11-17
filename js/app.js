@@ -46,6 +46,7 @@ const app = {
 
 let view = null;
 let renderSeq = 0;
+let scannedCode = null; // zuletzt gescanntes Etikett (nur im Speicher)
 // Platzhalter beim Laden: Titel und zwei Karten in grau (Klasse loading, damit Tests darauf warten können)
 const SKELETON = '<div class="loading skeleton" role="status" aria-label="Lädt"><span class="sk sk-title"></span>'
   + '<div class="sk-card"><span class="sk"></span><span class="sk sk-short"></span><span class="sk"></span></div>'
@@ -77,15 +78,30 @@ const ctx = {
     await loadHousehold();
     ctx.go('');
   },
-  // Eingabe (Code, Adresse oder Nummer) öffnen; liefert false bei Unsinn
+  // Ein Ding aus einem anderen eigenen Haushalt: still dorthin wechseln (Personen, Orte, Fotos gehören dazu)
+  async useHousehold(id) {
+    if (!id || id === app.household) return;
+    if (!app.memberships?.some(m => m.household_id === id && m.status === 'active')) return;
+    store.setHousehold(id);
+    await loadHousehold();
+    toast(`Haushalt: ${app.membership.households?.name ?? 'gewechselt'}`);
+  },
+  // Eingabe aus dem Scanner (Code, Adresse oder Nummer) öffnen; liefert false bei Unsinn.
+  // Merkt sich den Code, damit nur ein echter Scan ein Ding verschiebt oder einräumt.
   async openLabel(input) {
     const p = parseLabelInput(input);
     if (!p) return false;
-    if (p.code) { ctx.go('k/' + p.code); return true; }
-    const code = await codeForNumber(app.household, p.kind, p.number);
+    const code = p.code ?? await codeForNumber(app.household, p.kind, p.number);
     if (!code) return false;
+    scannedCode = code;
     ctx.go('k/' + code);
     return true;
+  },
+  // true genau einmal, wenn dieser Code gerade gescannt wurde (nicht bei Links, Liste oder Neuladen)
+  fromScan(code) {
+    const hit = scannedCode === code;
+    scannedCode = null;
+    return hit;
   }
 };
 
@@ -271,7 +287,13 @@ takeUrlParams();
 if (isConfigured()) {
   initApi();
   auth.onChange((event, session) => {
-    if (event === 'SIGNED_OUT') { app.session = null; app.user = null; app.gate = 'login'; show(); }
+    if (event === 'SIGNED_OUT') {
+      // Gespeicherte Inhalte gehören zur Anmeldung: weg damit (z. B. abgelaufene Sitzung, geteiltes Gerät). Darstellung bleibt.
+      const theme = store.theme();
+      store.clearAll();
+      store.setTheme(theme);
+      app.session = null; app.user = null; app.gate = 'login'; show();
+    }
     if (event === 'SIGNED_IN' && session?.user?.id !== app.user?.id) boot();
   });
 }

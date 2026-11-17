@@ -3,6 +3,7 @@
 // Screenshots landen außerhalb des Repos (Standard: Temp-Ordner), damit nichts versehentlich eingecheckt wird.
 import { chromium } from 'playwright';
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { serve } from '../../scripts/serve.mjs';
@@ -285,6 +286,14 @@ try {
   await page.getByRole('button', { name: 'Öffnen' }).click();
   await page.locator('.stow-row', { hasText: 'vorher: Dachboden' }).waitFor();
   await shot(page, 'einraeumen');
+  // Ein Etikett nur öffnen (Liste, alter Link) darf beim Einräumen nichts verschieben – nur ein Scan
+  const stowRows = await page.locator('.stow-row').count();
+  await page.evaluate(code => { location.hash = '#/k/' + code; }, c.k[4]);
+  await page.locator('.box-head', { hasText: 'Fotoalben' }).waitFor();
+  check(!(await page.locator('.crumb', { hasText: 'Regal 1' }).count()), 'Öffnen ohne Scan verschiebt nicht ins Einräum-Ziel');
+  await page.locator('.tabs [data-tab="scan"]').click();
+  await page.locator('.banner', { hasText: 'Einräumen in „Regal 1“' }).waitFor();
+  check(await page.locator('.stow-row').count() === stowRows, 'Öffnen ohne Scan steht nicht in „Gerade eingeräumt“');
   await page.getByRole('button', { name: 'Fertig' }).click();
   await page.locator('.box-head', { hasText: 'Regal 1' }).waitFor();
   check(await page.locator('.row-title', { hasText: 'Weihnachtsdeko' }).isVisible(), 'Eingeräumte Kiste steht im Regal');
@@ -311,6 +320,14 @@ try {
   await shot(page, 'haushalt');
   const token = (await page.locator('.invite .mono').innerText()).trim();
   check(/^[0-9A-HJKMNP-TV-Z]{16}$/.test(token), 'Einladungscode hat 16 Zeichen');
+  // Sicherung: Datei mit allen Tabellen des Haushalts, nichts aus fremden Haushalten
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Sicherung herunterladen' }).click()]);
+  const backup = JSON.parse(await readFile(await download.path(), 'utf8'));
+  check(backup.app === 'qrate' && backup.schemaVersion === 7, 'Sicherung hat App und Schema-Version');
+  check(backup.data.boxes.some(b => b.name === 'Weihnachtsdeko') && backup.data.items.length > 0 && backup.data.events.length > 0, 'Sicherung enthält Dinge, Gegenstände und Verlauf');
+  check(new Set(Object.values(backup.data).flat().map(r => r.household_id)).size === 1, 'Sicherung enthält nur einen Haushalt');
+  check(/^qrate-sicherung-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()), 'Dateiname der Sicherung');
+
   // Darstellung: Hell setzt html[data-theme], System nimmt es wieder weg
   await page.getByRole('button', { name: 'Hell', exact: true }).click();
   check(await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'light')), 'Darstellung Hell wird angewendet');
