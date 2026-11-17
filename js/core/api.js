@@ -143,6 +143,8 @@ export async function deleteItemPhoto(photo) {
   await run(sb.from('item_photos').delete().eq('id', photo.id));
   await sb.storage.from(PHOTOS).remove([photo.path]);
 }
+// Fotospeicher des Haushalts: belegt und Grenze (siehe 0008_storage_limits.sql)
+export const householdStorage = async h => (await rpc('household_storage', { p_household: h }))[0];
 export const moveBox = (id, parentId) => run(sb.from('boxes').update({ parent_id: parentId || null }).eq('id', id));
 
 // ---------- Ausleihen (Personen ohne App-Zugang, nur Name und Telefon) ----------

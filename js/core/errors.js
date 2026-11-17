@@ -14,6 +14,8 @@ const ERRORS = {
   type_needs_parent: 'Erst einen Ort wählen: Der Inhalt braucht einen Platz.',
   already_returned: 'Diese Ausleihe ist schon zurückgegeben.',
   photo_limit: 'Höchstens 8 Fotos pro Kiste.',
+  storage_limit: 'Der Fotospeicher dieses Haushalts ist voll. Bitte alte Fotos löschen.',
+  storage_full: 'Der Fotospeicher der App ist gerade voll. Bitte später erneut versuchen.',
   clipboard_unavailable: 'Dieser Browser gibt die Zwischenablage nicht frei. Bitte in das Feld tippen, lange drücken und „Einfügen“ wählen.',
   clipboard_empty: 'In der Zwischenablage ist kein Bild. Erst lange auf den Gegenstand drücken und „Auswahl kopieren“ wählen.',
   photo_unreadable: 'Das Bild ließ sich nicht lesen. Bitte ein anderes Foto wählen.',

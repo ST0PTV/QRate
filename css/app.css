@@ -391,3 +391,8 @@ h1, h2, h3, .card-title { text-wrap: balance; }
 .card-head + .stow-row { border-top: 0; }
 .stow-row > .ic { color: var(--good); flex: none; }
 .lend-row.due { box-shadow: inset 3px 0 0 var(--warn); padding-left: 10px; }
+
+/* Fotospeicher: schmaler Balken, ab 80 % in Warnfarbe */
+.meter { height: 8px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--muted); border-radius: inherit; }
+.meter.warn > span { background: var(--warn); }

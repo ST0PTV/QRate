@@ -1,6 +1,6 @@
 // Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Darstellung, Haushalt wechseln, Abmelden.
 import { CONFIG } from '../core/config.js';
-import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower, exportHousehold } from '../core/api.js';
+import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower, exportHousehold, householdStorage } from '../core/api.js';
 import { inviteUrl } from '../core/code.js';
 import { store } from '../core/store.js';
 import { esc, qrSvg, toast, copyText, fmtTime, applyTheme, downloadText } from '../core/ui.js';
@@ -20,7 +20,8 @@ export default {
     const { app } = ctx;
     const hhName = app.membership.households?.name ?? 'Haushalt';
     ctx.setTitle(hhName, `${ROLE[app.membership.role]} · ${app.membership.display_name}`);
-    const [list, people] = await Promise.all([members(app.household), borrowers(app.household).catch(() => [])]);
+    const [list, people, space] = await Promise.all([members(app.household), borrowers(app.household).catch(() => []),
+      householdStorage(app.household).catch(() => null)]);
     const pending = list.filter(m => m.status === 'pending');
     const active = list.filter(m => m.status === 'active');
     const others = app.memberships.filter(m => m.status === 'active' && m.household_id !== app.household);
@@ -57,6 +58,7 @@ export default {
           <button class="btn small ghost${armedPerson === p.id ? ' danger' : ''}" data-act="deletePerson" data-id="${p.id}">${armedPerson === p.id ? 'Wirklich löschen?' : 'Löschen'}</button>
         </div>`).join('')}
       </section>` : ''}
+      ${space ? storageCard(space) : ''}
       <section class="card stack">
         <h3>Sicherung</h3>
         <p class="muted small">Alle Dinge, Gegenstände, Etiketten, Ausleihen und der Verlauf als Datei. Fotos sind nicht enthalten.</p>
@@ -139,4 +141,17 @@ async function refreshNames(ctx) {
   const list = await members(ctx.app.household);
   ctx.app.names = new Map(list.map(m => [m.user_id, m.display_name]));
   await ctx.rerender();
+}
+
+// Fotospeicher: belegt von erlaubt, ab 80 % ein Hinweis
+const mb = b => (b / 1048576).toLocaleString('de-DE', { maximumFractionDigits: b < 10485760 ? 1 : 0 });
+function storageCard(s) {
+  const share = Math.max(s.used_bytes / s.limit_bytes, s.files / s.limit_files);
+  const pct = Math.min(100, Math.round(share * 100));
+  return `<section class="card stack">
+    <h3>Fotospeicher</h3>
+    <div class="meter${share >= 0.8 ? ' warn' : ''}" role="meter" aria-label="Fotospeicher belegt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+    <p class="muted small">${s.used_bytes > 0 && s.used_bytes < 1048576 ? 'Unter 1' : mb(s.used_bytes)} von ${mb(s.limit_bytes)} MB belegt, ${s.files} von ${s.limit_files} Fotos.</p>
+    ${share >= 0.8 ? `<p class="small">${share >= 1 ? 'Voll: Neue Fotos gehen erst, wenn alte gelöscht sind.' : 'Fast voll. Alte Fotos löschen schafft Platz.'}</p>` : ''}
+  </section>`;
 }

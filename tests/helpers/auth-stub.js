@@ -13,7 +13,8 @@ export const AUTH_STUB = `
   create table storage.buckets (id text primary key, name text not null, public boolean default false,
     file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets (id),
-    name text not null, owner uuid default auth.uid(), created_at timestamptz default now(), unique (bucket_id, name));
+    name text not null, owner uuid default auth.uid(), created_at timestamptz default now(), metadata jsonb,
+    unique (bucket_id, name));
   create function storage.foldername(name text) returns text[] language sql immutable as
     $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
   alter table storage.objects enable row level security;
@@ -26,4 +27,4 @@ export const AUTH_GRANTS = `
   grant execute on function storage.foldername(text) to authenticated;
 `;
 
-export const MIGRATIONS = ['0001_schema.sql', '0002_functions.sql', '0003_photos.sql', '0004_item_photos.sql', '0005_things.sql', '0006_lending.sql', '0007_lending_privacy.sql'];
+export const MIGRATIONS = ['0001_schema.sql', '0002_functions.sql', '0003_photos.sql', '0004_item_photos.sql', '0005_things.sql', '0006_lending.sql', '0007_lending_privacy.sql', '0008_storage_limits.sql'];

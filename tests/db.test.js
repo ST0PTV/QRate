@@ -348,3 +348,37 @@ test('Ausleihen: Person, Erinnerung, einmal gleichzeitig, Fremder sieht nichts',
   assert.ok(!JSON.stringify(evs).includes('Jonas'), 'Name der gelöschten Person steht nicht mehr im Verlauf');
   assert.ok(JSON.stringify(evs).includes('Mia'), 'Andere Personen bleiben im Verlauf');
 });
+
+test('Speichergrenzen: pro Haushalt und für den ganzen Bucket, Fremde erfahren nichts', async () => {
+  const MB = 1024 * 1024;
+  const hh = await as(db, robin, async ({ rpc }) => (await rpc('create_household', { p_name: 'Werkstatt', p_display_name: 'Robin' }))[0].create_household);
+  const usage = user => as(db, user, async ({ rpc }) => (await rpc('household_storage', { p_household: hh }))[0]);
+  const upload = (user, name, size) => as(db, user, ({ q }) =>
+    q(`insert into storage.objects (bucket_id, name, metadata) values ('box-photos', $1, $2)`, [name, size == null ? null : { size }]));
+  // Daten anderer Haushalte direkt eintragen (wie durch frühere Uploads)
+  const fill = (name, size) => db.query(`insert into storage.objects (bucket_id, name, metadata) values ('box-photos', $1, $2)`, [name, { size }]);
+
+  assert.deepEqual({ ...(await usage(robin)) }, { used_bytes: 0, files: 0, limit_bytes: 250 * MB, limit_files: 1000 });
+  await upload(robin, `${hh}/k/1.jpg`, 400000);
+  // Ohne Größe (Hochladen läuft noch) zählt die größte erlaubte Datei
+  await upload(robin, `${hh}/k/2.jpg`, null);
+  assert.deepEqual({ ...(await usage(robin)) }, { used_bytes: 400000 + 3 * MB, files: 2, limit_bytes: 250 * MB, limit_files: 1000 });
+
+  // Fremder: kein Verbrauch, kein Hochladen
+  await rejects(usage(fremd), 'no_access');
+  await rejects(as(db, null, ({ rpc }) => rpc('household_storage', { p_household: hh })), 'permission denied');
+
+  // Haushalt voll: Mitglied bekommt eine klare Meldung, Fremder nur die übliche Ablehnung
+  await fill(`${hh}/k/gross.jpg`, 250 * MB);
+  await rejects(upload(robin, `${hh}/k/3.jpg`, 1000), 'storage_limit');
+  await rejects(upload(fremd, `${hh}/k/3.jpg`, 1000), 'row-level security');
+  await db.query(`delete from storage.objects where name = $1`, [`${hh}/k/gross.jpg`]);
+  await upload(robin, `${hh}/k/3.jpg`, 1000);
+
+  // Bucket insgesamt fast voll (andere Haushalte): niemand lädt mehr hoch
+  const before = (await db.query(`select coalesce(sum((metadata->>'size')::bigint), 0)::bigint as s from storage.objects`)).rows[0].s;
+  await fill('anderer-haushalt/k/a.jpg', 800 * MB - Number(before));
+  await rejects(upload(robin, `${hh}/k/4.jpg`, 1000), 'storage_full');
+  await db.query(`delete from storage.objects where name like 'anderer-haushalt/%'`);
+  await upload(robin, `${hh}/k/4.jpg`, 1000);
+});

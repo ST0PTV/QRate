@@ -186,7 +186,7 @@ export async function addPhoto(householdId, boxId, blob) {
   await ready;
   const path = `${householdId}/${boxId}/${crypto.randomUUID()}.jpg`;
   await as(current, async t => {
-    await t.q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [path]);
+    await t.q(`insert into storage.objects (bucket_id, name, metadata) values ('box-photos', $1, jsonb_build_object('size', $2::bigint))`, [path, blob.size]);
     await t.q('insert into public.box_photos (box_id, path) values ($1, $2)', [boxId, path]);
   });
   photoBlobs.set(path, URL.createObjectURL(blob));
@@ -205,7 +205,7 @@ export async function setItemPhoto(householdId, boxId, itemId, blob, cutout) {
   await ready;
   const path = `${householdId}/${boxId}/items/${crypto.randomUUID()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
   await as(current, async t => {
-    await t.q(`insert into storage.objects (bucket_id, name) values ('box-photos', $1)`, [path]);
+    await t.q(`insert into storage.objects (bucket_id, name, metadata) values ('box-photos', $1, jsonb_build_object('size', $2::bigint))`, [path, blob.size]);
     const old = await t.q('delete from public.item_photos where item_id = $1 returning path', [itemId]);
     await t.q('insert into public.item_photos (item_id, path, cutout) values ($1, $2, $3)', [itemId, path, cutout]);
     for (const o of old) await t.q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [o.path]);
@@ -216,6 +216,8 @@ export async function deleteItemPhoto(photo) {
   await q('delete from public.item_photos where id = $1', [photo.id]);
   await q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [photo.path]);
 }
+
+export const householdStorage = async h => (await q('select * from public.household_storage($1)', [h]))[0];
 
 // Ausleihen
 export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'borrowers', 'lendings', 'members'];
