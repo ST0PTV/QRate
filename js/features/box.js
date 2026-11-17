@@ -7,7 +7,9 @@ import { esc, icon, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { errorText } from '../core/errors.js';
 import { shrinkImage, shrinkCutout, clipboardImage } from '../core/photo.js';
 import { reminderIcs, downloadIcs, inDays } from '../core/ics.js';
-import { TYPES, GROUPS, typeLabel, typeIcon, canHold, isPlace, buildTree } from '../core/types.js';
+import { TYPES, GROUPS, typeLabel, typeIcon, groupOf, canHold, isPlace, buildTree } from '../core/types.js';
+import { buyHtml, buyBadgeHtml, resetBuy, fillPurchases, buyLoaded, purchaseOf, purchaseHandlers } from './purchase.js';
+import { activeRound } from './check-round.js';
 
 // Zustand der geöffneten Kiste (Panels, nachgeladene Listen)
 const st = { boxId: null, code: null, panel: null, things: null, removed: null, photos: null, photoSel: 0, photoArmed: null,
@@ -18,6 +20,7 @@ function resetFor(boxId) {
   if (st.boxId === boxId) return;
   Object.assign(st, { boxId, panel: null, things: null, removed: null, photos: null, photoSel: 0, photoArmed: null, itemPhotos: null });
   clearShot();
+  resetBuy(boxId);
 }
 
 // ---------- Darstellung ----------
@@ -32,16 +35,19 @@ function itemHtml(it) {
       <input class="input grow" id="ename" maxlength="120" required value="${esc(it.name)}" aria-label="Name">
       <input class="input wide-field" id="enote" maxlength="500" placeholder="Notiz (optional)" value="${esc(it.note)}" aria-label="Notiz">
       <div class="btn-row"><button class="btn primary small" type="submit">Speichern</button>
-      <button class="btn ghost small" type="button" data-act="panel" data-v="">Abbrechen</button></div>
+      <button class="btn ghost small" type="button" data-act="panel" data-v="">Abbrechen</button>
+      <button class="btn small" type="button" data-act="buyEdit" data-target="${esc(JSON.stringify({ item_id: it.id }))}">${icon('receipt')} Kauf und Garantie</button></div>
     </form>`;
   }
   if (st.panel === 'pic:' + it.id) return `<div class="item item-pic-panel" id="itemPic" data-id="${it.id}">${picPanelHtml(it)}</div>`;
+  if (st.panel === 'buy:' + it.id) return `<div class="item item-buy-panel" id="itemBuy" data-id="${it.id}">${buyHtml({ item_id: it.id }, it.name, true)}</div>`;
   return `<div class="item">
     <span class="qty">${it.qty}×</span>
     ${picBtnHtml(it)}
     <button type="button" class="item-main grow" data-act="panel" data-v="edit:${it.id}" aria-label="${esc(it.name)} bearbeiten">
       <span class="item-name">${esc(it.name)}</span>
       ${it.note ? `<span class="item-note">${esc(it.note)}</span>` : ''}
+      ${buyBadgeHtml(it.id)}
       <span class="meta">${esc(it.by)} · ${fmtDay(it.created_at)}</span>
     </button>
     <button class="icon-btn take" data-act="take" data-id="${it.id}" data-name="${esc(it.name)}" aria-label="${esc(it.name)} entnehmen" title="Entnehmen">${icon('takeout')}</button>
@@ -137,7 +143,9 @@ function boxHtml(p, { cachedAt } = {}) {
       ${toolBtn('type', 'Typ', typeIcon(b.type))}
       ${holds ? `<button class="tool" data-act="stow">${icon('scan')}<span>Einräumen</span></button>` : ''}
     </div>
+    ${holds && !isPlace(b.type) ? checkBarHtml(b, ctxRef) : ''}
     ${panelHtml(b)}
+    <section class="card stack" id="buy">${buyCardHtml(b)}</section>
     ${isPlace(b.type) ? '' : `<section class="card stack" id="lending">${lendHtml()}</section>`}
     ${holds && children.length ? `<section class="card">
       <div class="card-head"><h3>${isPlace(b.type) ? 'Hier steht' : 'Darin'}</h3><span class="muted small">${children.length}</span></div>
@@ -156,6 +164,81 @@ function boxHtml(p, { cachedAt } = {}) {
         : '<button class="link-btn" data-act="showRemoved">Entnommene anzeigen</button>'}
     </section>` : ''}
     <section class="card"><h3 class="card-title">Verlauf</h3><div id="events"><p class="muted small">Lädt …</p></div></section>`;
+}
+
+// ---------- Prüfen: „Stimmt so“ merkt sich Zeit und Person; in der Prüfrunde geht es danach zurück zum Scannen ----------
+
+function checkBarHtml(b, ctx) {
+  const round = activeRound(ctx);
+  return `${round ? `<div class="banner"><span>Prüfrunde: Inhalt ansehen, dann „Stimmt so“ tippen.</span>
+      <a class="btn small" href="#/scan">Zum Scannen</a></div>` : ''}
+    <div class="check-bar">
+      <span class="grow">${icon('shield', 'inline')}${b.checked_at
+        ? `Geprüft am ${fmtDay(b.checked_at)}${b.checked_by_name ? ` von ${esc(b.checked_by_name)}` : ''}`
+        : 'Noch nie geprüft'}</span>
+      <button class="btn small${round ? ' primary' : ''}" data-act="checkOk">${icon('check')} Stimmt so</button>
+    </div>`;
+}
+
+const checkActions = {
+  async checkOk(_, ctx) {
+    const b = st.current;
+    await api.checkThing(b.id);
+    const round = activeRound(ctx);
+    if (round) {
+      round.done = [{ id: b.id, name: b.name }, ...round.done.filter(d => d.id !== b.id)];
+      store.setCheckRound(round);
+      if (st.code) store.cache(st.code, null);
+      toast(`„${b.name}“ geprüft`);
+      ctx.go('scan');
+      return;
+    }
+    toast('Als geprüft gespeichert');
+    await afterChange(ctx);
+  }
+};
+
+// Kaufdaten: Formular öffnen und schließen über das Panel der Ansicht
+const buyHandlers = purchaseHandlers({
+  ctxHousehold: ctx => ctx.app.household,
+  async onEdit(target, ctx) {
+    const edit = document.querySelector('form[data-form="saveItem"]');
+    if (edit && [...edit.querySelectorAll('input')].some(i => i.value !== i.defaultValue)) {
+      toast('Erst die Änderung speichern oder abbrechen');
+      return;
+    }
+    st.panel = target.box_id ? 'buy:box' : 'buy:' + target.item_id;
+    clearShot();
+    await ctx.rerender();
+    (document.getElementById('itemBuy') ?? document.getElementById('buy'))?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  },
+  async onDone(ctx) {
+    st.panel = null;
+    await ctx.rerender();
+  }
+});
+
+// Karte für Kaufdaten: bei Einzelstücken immer, sonst nur, wenn schon ein Kauf am Ding hängt (z. B. nach Typwechsel)
+function buyCardHtml(b) {
+  const show = groupOf(b.type) === 'single' || purchaseOf({ box_id: b.id }) || st.panel === 'buy:box';
+  return show ? buyHtml({ box_id: b.id }, b.name, st.panel === 'buy:box') : '';
+}
+
+// Kaufdaten laden und an den Platzhaltern einsetzen
+async function fillBuy(boxId) {
+  const items = st.current?.items ?? [];
+  if (buyLoaded(boxId)) return;
+  await fillPurchases(boxId, items.map(i => i.id));
+  if (st.boxId !== boxId) return;
+  const card = document.getElementById('buy');
+  if (card) card.innerHTML = buyCardHtml(st.current);
+  const form = document.getElementById('itemBuy');
+  const it = items.find(i => i.id === form?.dataset.id);
+  if (form && it) form.innerHTML = buyHtml({ item_id: it.id }, it.name, true);
+  for (const i of items) {
+    const slot = document.querySelector(`[data-buy="${i.id}"]`);
+    if (slot) slot.outerHTML = buyBadgeHtml(i.id);
+  }
 }
 
 function deniedHtml() {
@@ -629,6 +712,7 @@ const boxActions = {
   },
   moveScan(_, ctx) {
     const b = st.current;
+    store.setCheckRound(null);
     store.setMoving({ id: b.id, name: b.name });
     st.panel = null;
     ctx.go('scan');
@@ -651,6 +735,7 @@ const boxActions = {
     ctx.rerender();
   },
   stow(_, ctx) {
+    store.setCheckRound(null);
     store.setStow({ id: st.current.id, name: st.current.name, done: [] });
     st.panel = null;
     ctx.go('scan');
@@ -692,7 +777,9 @@ const boxInput = {
   }
 };
 
+let ctxRef = null; // für Darstellungen, die den Haushalt brauchen (Prüfrunde)
 function showBox(ctx, p, opts) {
+  ctxRef = ctx;
   resetFor(p.box.id);
   st.current = { ...p.box, items: p.items };
   st.childCount = p.children?.length ?? 0;
@@ -706,6 +793,7 @@ function showBox(ctx, p, opts) {
 // Nach dem Zeichnen: Gegenstandsfotos laden oder vorhandene einsetzen, Einfügen-Feld verdrahten
 function afterPaint() {
   if (st.itemPhotos === null) fillItemPics(st.boxId);
+  fillBuy(st.boxId);
   wirePaste();
 }
 
@@ -754,15 +842,16 @@ export const resolveView = {
     store.cache(code, p);
     return showBox(ctx, p);
   },
+  leave() { resetBuy(null); },
   mounted(ctx) {
     picCtx = ctx; // auch Einfügen ins Feld ohne vorherigen Knopf speichert
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
     if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); fillLending(ctx, st.current.id); }
   },
-  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions },
-  forms: boxForms,
+  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions, ...checkActions, ...buyHandlers.actions },
+  forms: { ...boxForms, ...buyHandlers.forms },
   input: boxInput,
-  change: { ...photoChange, ...picChange }
+  change: { ...photoChange, ...picChange, ...buyHandlers.change }
 };
 
 export const boxView = {
@@ -775,11 +864,12 @@ export const boxView = {
     st.code = p.box.code;
     return showBox(ctx, p);
   },
+  leave() { resetBuy(null); },
   mounted(ctx, id) { picCtx = ctx; fillEvents(ctx, id); fillPhotos(id); afterPaint(); fillLending(ctx, id); },
-  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions },
-  forms: boxForms,
+  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions, ...checkActions, ...buyHandlers.actions },
+  forms: { ...boxForms, ...buyHandlers.forms },
   input: boxInput,
-  change: { ...photoChange, ...picChange }
+  change: { ...photoChange, ...picChange, ...buyHandlers.change }
 };
 
 // ---------- Etikett zuordnen ----------

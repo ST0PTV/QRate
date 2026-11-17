@@ -36,6 +36,10 @@ export const store = {
   stow: () => read('stow', null),
   setStow: s => write('stow', s),
 
+  // Prüfrunde: scannen, ansehen, „Stimmt so“ { done: [{ id, name }] }
+  checkRound: () => read('check_round', null),
+  setCheckRound: r => write('check_round', r),
+
   // Zuletzt geöffneter Ort oder Behälter: Vorschlag beim Anlegen
   lastPlace: () => read('last_place', null),
   setLastPlace: p => write('last_place', p),

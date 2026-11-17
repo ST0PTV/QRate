@@ -1,7 +1,7 @@
 // Offline-Cache für die App-Hülle. Daten von Supabase (anderer Ursprung) gehen nie durch den Cache.
 // Neue Datei → hier eintragen und CACHE_VERSION erhöhen (npm run check prüft das).
-const CACHE_VERSION = 'qr-0.2.0-9';
-// Inhalt: cadae11bbfb1aa8f
+const CACHE_VERSION = 'qr-0.2.0-10';
+// Inhalt: 613ef1c4f782b7bc
 const PRECACHE = [
   './',
   'index.html',
@@ -19,11 +19,16 @@ const PRECACHE = [
   'js/core/scanner.js',
   'js/core/store.js',
   'js/core/ui.js',
+  'js/core/warranty.js',
+  'js/core/zip.js',
+  'js/core/backup.js',
   'js/features/auth.js',
   'js/features/box.js',
   'js/features/home.js',
   'js/features/household.js',
   'js/features/labels.js',
+  'js/features/purchase.js',
+  'js/features/check-round.js',
   'js/features/scan.js',
   'js/features/search.js',
   'vendor/qrcode.js',

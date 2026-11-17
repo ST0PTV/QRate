@@ -382,3 +382,75 @@ test('Speichergrenzen: pro Haushalt und für den ganzen Bucket, Fremde erfahren 
   await db.query(`delete from storage.objects where name like 'anderer-haushalt/%'`);
   await upload(robin, `${hh}/k/4.jpg`, 1000);
 });
+
+test('Prüfen: Zeit und Person vom Server, Verlauf höchstens stündlich, Fremder darf nicht', async () => {
+  const [label] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'K', p_count: 1 }));
+  const box = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: label.code, p_name: 'Prüfkiste' }))[0].claim_label);
+  await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name, qty) values ($1, 'Schrauben', 3)`, [box.id]));
+  const check = user => as(db, user, ({ rpc }) => rpc('check_thing', { p_id: box.id }));
+  const thing = async user => (await as(db, user, ({ rpc }) => rpc('get_thing', { p_id: box.id })))[0].get_thing;
+
+  assert.equal((await thing(alex)).box.checked_at, null);
+  await check(robin);
+  const b = (await thing(alex)).box;
+  assert.ok(b.checked_at);
+  assert.equal(b.checked_by_name, 'Robin');
+  await check(alex); // gleich danach: kein zweiter Verlaufseintrag
+  const ev = await as(db, alex, ({ q }) => q(`select detail from public.events where box_id = $1 and action = 'box_checked'`, [box.id]));
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].detail.items, 1);
+  assert.equal((await thing(alex)).box.checked_by_name, 'Alex');
+
+  // Fremder und nicht angemeldet: kein Prüfen, Spalten nicht direkt beschreibbar
+  await rejects(check(fremd), 'no_access');
+  await rejects(as(db, null, ({ rpc }) => rpc('check_thing', { p_id: box.id })), 'permission denied');
+  await rejects(as(db, alex, ({ q }) => q(`update public.boxes set checked_at = now() - interval '1 year' where id = $1`, [box.id])), 'permission denied');
+});
+
+test('Kauf und Garantie: für Ding oder Gegenstand, Beleg im eigenen Ordner, Fremder sieht nichts', async () => {
+  const [label] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'Q', p_count: 1 }));
+  const tv = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: label.code, p_name: 'Fernseher', p_type: 'thing' }))[0].claim_label);
+  const [kl] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'K', p_count: 1 }));
+  const kiste = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: kl.code, p_name: 'Werkzeug' }))[0].claim_label);
+  const [bohrer] = await as(db, alex, ({ q }) => q(`insert into public.items (box_id, name) values ($1, 'Bohrmaschine') returning id`, [kiste.id]));
+  const buy = (user, cols) => {
+    const keys = Object.keys(cols);
+    return as(db, user, ({ q }) => q(`insert into public.purchases (${keys.join(', ')}) values (${keys.map((_, i) => '$' + (i + 1)).join(', ')})
+      returning household_id, created_by, price::text`, keys.map(k => cols[k])));
+  };
+
+  const [p] = await buy(alex, { box_id: tv.id, bought_on: '2025-03-01', price: '499.90', warranty_until: '2027-03-01', receipt_path: `${house}/receipts/a.jpg` });
+  assert.deepEqual([p.household_id, p.created_by, p.price], [house, alex, '499.90']);
+  await buy(robin, { item_id: bohrer.id, serial: 'SN-1' });
+
+  // Nur ein Kauf pro Ding oder Gegenstand, genau eins von beiden
+  await rejects(buy(alex, { box_id: tv.id }), 'duplicate key');
+  await rejects(buy(alex, { box_id: kiste.id, item_id: bohrer.id }), 'purchases_one_target');
+  await rejects(buy(alex, { box_id: null, item_id: null }), 'row-level security'); // ohne Ziel kein Haushalt
+  // Beleg nur unter <haushalt>/receipts/
+  await rejects(buy(alex, { box_id: kiste.id, receipt_path: 'anderer/receipts/x.jpg' }), 'Beleg-Pfad');
+  await rejects(as(db, alex, ({ q }) => q(`update public.purchases set receipt_path = $2 where box_id = $1`, [tv.id, `${house}/x.jpg`])), 'Beleg-Pfad');
+  // Negativer Preis nicht
+  await rejects(buy(alex, { box_id: kiste.id, price: '-1' }), 'check constraint');
+  // Ziel nicht umhängen
+  await rejects(as(db, alex, ({ q }) => q(`update public.purchases set box_id = $2 where box_id = $1`, [tv.id, kiste.id])), 'permission denied');
+
+  // Mitglied ändert
+  const [u] = await as(db, robin, ({ q }) => q(`update public.purchases set shop = 'Markt' where box_id = $1 returning shop`, [tv.id]));
+  assert.equal(u.shop, 'Markt');
+
+  // Fremder: sieht nichts, legt nichts an, ändert und löscht nichts
+  assert.equal((await as(db, fremd, ({ q }) => q('select * from public.purchases'))).length, 0);
+  await rejects(buy(fremd, { box_id: kiste.id }), 'row-level security');
+  assert.equal((await as(db, fremd, ({ q }) => q(`update public.purchases set shop = 'x' returning id`))).length, 0);
+  assert.equal((await as(db, fremd, ({ q }) => q('delete from public.purchases returning id'))).length, 0);
+  await rejects(as(db, null, ({ q }) => q('select * from public.purchases')), 'permission denied');
+
+  // Gegenstand zieht um: Kauf bleibt dran; Ding gelöscht: Kauf weg
+  const [kl2] = await as(db, alex, ({ rpc }) => rpc('reserve_labels', { p_household: house, p_kind: 'K', p_count: 1 }));
+  const kiste2 = await as(db, alex, async ({ rpc }) => (await rpc('claim_label', { p_code: kl2.code, p_name: 'Keller' }))[0].claim_label);
+  await as(db, alex, ({ q }) => q('update public.items set box_id = $2 where id = $1', [bohrer.id, kiste2.id]));
+  assert.equal((await as(db, alex, ({ q }) => q('select serial from public.purchases where item_id = $1', [bohrer.id])))[0].serial, 'SN-1');
+  await as(db, alex, ({ q }) => q('delete from public.boxes where id = $1', [tv.id]));
+  assert.equal((await as(db, alex, ({ q }) => q('select * from public.purchases where box_id = $1', [tv.id]))).length, 0);
+});

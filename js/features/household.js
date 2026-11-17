@@ -1,9 +1,10 @@
 // Haushalt: Mitglieder, Einladungen, Bestätigen und Entfernen, Darstellung, Haushalt wechseln, Abmelden.
 import { CONFIG } from '../core/config.js';
-import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower, exportHousehold, householdStorage } from '../core/api.js';
+import { members, createInvite, setMemberStatus, renameHousehold, auth, borrowers, deleteBorrower, exportHousehold, householdStorage, downloadFile } from '../core/api.js';
+import { backupJson, backupZip } from '../core/backup.js';
 import { inviteUrl } from '../core/code.js';
 import { store } from '../core/store.js';
-import { esc, qrSvg, toast, copyText, fmtTime, applyTheme, downloadText } from '../core/ui.js';
+import { esc, qrSvg, toast, copyText, fmtTime, applyTheme, downloadText, downloadBlob } from '../core/ui.js';
 
 let invite = null;      // { token, expires_at }
 let armed = null;       // Mitglied, dessen Entfernen auf Bestätigung wartet
@@ -12,6 +13,8 @@ let armedPerson = null; // Person, deren Löschen auf Bestätigung wartet
 
 const ROLE = { admin: 'Admin', member: 'Mitglied', guest: 'Gast' };
 const THEMES = [['system', 'System'], ['dark', 'Dunkel'], ['light', 'Hell']];
+// Datum für Dateinamen, lokal (nicht UTC)
+const today = () => new Date().toLocaleDateString('sv-SE');
 
 export default {
   id: 'household',
@@ -61,8 +64,11 @@ export default {
       ${space ? storageCard(space) : ''}
       <section class="card stack">
         <h3>Sicherung</h3>
-        <p class="muted small">Alle Dinge, Gegenstände, Etiketten, Ausleihen und der Verlauf als Datei. Fotos sind nicht enthalten.</p>
-        <button class="btn" data-act="backup">Sicherung herunterladen</button>
+        <p class="muted small">Alle Dinge, Gegenstände, Kaufdaten, Etiketten, Ausleihen und der Verlauf.
+          Die ZIP-Datei enthält zusätzlich alle Fotos und Belege sowie eine Inventarliste für Tabellenprogramme.</p>
+        ${space?.used_bytes > 100 * 1048576 ? `<p class="note">Viele Fotos (${mb(space.used_bytes)} MB): Die ZIP-Datei lieber am Computer erstellen, auf dem Handy reicht der Speicher sonst womöglich nicht.</p>` : ''}
+        <button class="btn" data-act="backupZip">Mit Fotos herunterladen (ZIP)</button>
+        <button class="btn ghost" data-act="backup">Nur Daten (JSON)</button>
       </section>
       <section class="card stack">
         <h3>Darstellung</h3>
@@ -111,10 +117,20 @@ export default {
     },
     async backup(_, ctx) {
       const data = await exportHousehold(ctx.app.household);
-      const file = { app: 'qrate', schemaVersion: 7, exportedAt: new Date().toISOString(), household: ctx.app.membership.households?.name ?? null, data };
-      downloadText(`qrate-sicherung-${new Date().toISOString().slice(0, 10)}.json`, 'application/json', JSON.stringify(file, null, 1));
+      downloadText(`qrate-sicherung-${today()}.json`, 'application/json', backupJson(data, ctx.app.membership.households?.name));
       const n = data.boxes.length + data.items.length;
       toast(`Sicherung erstellt: ${n} Einträge`);
+    },
+    async backupZip(el, ctx) {
+      toast('Sicherung wird erstellt …');
+      const data = await exportHousehold(ctx.app.household);
+      const label = el.textContent;
+      const { blob, photos, missing } = await backupZip(data, ctx.app.membership.households?.name, downloadFile, (i, n) => {
+        el.textContent = `Fotos ${i} von ${n} …`;
+      }).finally(() => { el.textContent = label; });
+      downloadBlob(`qrate-sicherung-${today()}.zip`, blob);
+      toast(missing ? `Sicherung erstellt, ${missing} ${missing === 1 ? 'Foto fehlt' : 'Fotos fehlen'} (siehe fehlende-fotos.txt)`
+        : `Sicherung erstellt: ${data.boxes.length + data.items.length} Einträge, ${photos} ${photos === 1 ? 'Foto' : 'Fotos'}`, missing ? 'error' : '');
     },
     toggleRename(_, ctx) { renaming = !renaming; ctx.rerender(); },
     theme(el, ctx) {

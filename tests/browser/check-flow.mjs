@@ -299,6 +299,26 @@ try {
   check(await page.locator('.row-title', { hasText: 'Weihnachtsdeko' }).isVisible(), 'Eingeräumte Kiste steht im Regal');
   check(await page.locator('.row-title', { hasText: 'Winterjacken' }).isVisible(), 'Neu angelegte Kiste steht im Regal');
 
+  // Prüfen und Kaufdaten: „Stimmt so“ an einer Kiste, Kaufdaten an einem Gegenstand
+  await page.locator('.row-title', { hasText: 'Weihnachtsdeko' }).click();
+  await page.locator('.box-head', { hasText: 'Weihnachtsdeko' }).waitFor();
+  await page.locator('.check-bar', { hasText: 'Noch nie geprüft' }).waitFor();
+  await page.getByRole('button', { name: 'Stimmt so' }).click();
+  await page.locator('.check-bar', { hasText: 'Geprüft am' }).waitFor();
+  check(await page.locator('#events', { hasText: 'hat den Inhalt geprüft' }).isVisible(), 'Prüfen steht im Verlauf');
+  await page.locator('.item-main').first().click();
+  await page.getByRole('button', { name: 'Kauf und Garantie' }).click();
+  await page.locator('form[data-form="buyForm"]').waitFor();
+  await page.fill('#buyDate', '2025-03-01');
+  await page.fill('#buyPrice', '1.299,90');
+  await page.getByRole('button', { name: '2 Jahre ab Kauf' }).click();
+  check(await page.inputValue('#buyWarranty') === '2027-03-01', 'Garantie: 2 Jahre ab Kauf');
+  await shot(page, 'kaufdaten');
+  await page.locator('form[data-form="buyForm"] button[type="submit"]').click();
+  await page.locator('.buy-badge', { hasText: 'Garantie bis 01.03.2027' }).waitFor();
+  await page.locator('.tabs [data-tab="home"]').click();
+  await page.locator('.card', { hasText: 'Prüfen' }).waitFor();
+
   // Etiketten: neutrale Etiketten reservieren und drucken
   await page.locator('.tabs [data-tab="labels"]').click();
   await page.getByRole('button', { name: '24 Etiketten (1 Bogen)' }).click();
@@ -321,12 +341,25 @@ try {
   const token = (await page.locator('.invite .mono').innerText()).trim();
   check(/^[0-9A-HJKMNP-TV-Z]{16}$/.test(token), 'Einladungscode hat 16 Zeichen');
   // Sicherung: Datei mit allen Tabellen des Haushalts, nichts aus fremden Haushalten
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Sicherung herunterladen' }).click()]);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Nur Daten (JSON)' }).click()]);
   const backup = JSON.parse(await readFile(await download.path(), 'utf8'));
-  check(backup.app === 'qrate' && backup.schemaVersion === 7, 'Sicherung hat App und Schema-Version');
+  check(backup.app === 'qrate' && backup.schemaVersion === 9, 'Sicherung hat App und Schema-Version');
+  check(backup.data.purchases?.some(p => Number(p.price) === 1299.9), 'Sicherung enthält Kaufdaten');
   check(backup.data.boxes.some(b => b.name === 'Weihnachtsdeko') && backup.data.items.length > 0 && backup.data.events.length > 0, 'Sicherung enthält Dinge, Gegenstände und Verlauf');
   check(new Set(Object.values(backup.data).flat().map(r => r.household_id)).size === 1, 'Sicherung enthält nur einen Haushalt');
   check(/^qrate-sicherung-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()), 'Dateiname der Sicherung');
+  // ZIP mit Inventarliste: Dateinamen aus dem zentralen Verzeichnis lesen
+  const [zipDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Mit Fotos herunterladen (ZIP)' }).click()]);
+  const zip = await readFile(await zipDl.path());
+  const endAt = zip.length - 22;
+  const names = [];
+  for (let at = zip.readUInt32LE(endAt + 16), n = 0; n < zip.readUInt16LE(endAt + 10); n++) {
+    const len = zip.readUInt16LE(at + 28);
+    names.push(zip.subarray(at + 46, at + 46 + len).toString('utf8'));
+    at += 46 + len + zip.readUInt16LE(at + 30) + zip.readUInt16LE(at + 32);
+  }
+  check(zip.readUInt32LE(0) === 0x04034B50 && names.includes('sicherung.json') && names.includes('inventar.csv'), `ZIP enthält Sicherung und Inventarliste (${names.join(', ')})`);
+  check(/^qrate-sicherung-\d{4}-\d{2}-\d{2}\.zip$/.test(zipDl.suggestedFilename()), 'Dateiname der ZIP-Sicherung');
 
   // Darstellung: Hell setzt html[data-theme], System nimmt es wieder weg
   await page.getByRole('button', { name: 'Hell', exact: true }).click();

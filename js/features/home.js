@@ -1,5 +1,7 @@
-// Übersicht: Kennzahlen, alles als Baum, gerade entnommen, letzte Änderungen.
-import { overview, restoreItem, openLendings, returnLending } from '../core/api.js';
+// Übersicht: Kennzahlen, Verliehen, Garantie endet bald, Prüfen, alles als Baum, gerade entnommen, letzte Änderungen.
+import { overview, restoreItem, openLendings, returnLending, warrantiesUntil } from '../core/api.js';
+import { startRound } from './check-round.js';
+import { dayText } from '../core/warranty.js';
 import { inDays } from '../core/ics.js';
 import { esc, icon, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { typeLabel, typeIcon, isPlace, canHold, buildTree } from '../core/types.js';
@@ -35,8 +37,9 @@ export default {
   async render(ctx) {
     const { app } = ctx;
     ctx.setTitle(app.membership.households?.name ?? 'Haushalt', `Angemeldet als ${app.membership.display_name}`);
-    const [{ boxes, freeLabels, events, taken = [] }, lent] = await Promise.all([overview(app.household), openLendings(app.household).catch(() => [])]);
     const today = inDays(0);
+    const [{ boxes, freeLabels, events, taken = [] }, lent, soon] = await Promise.all([overview(app.household),
+      openLendings(app.household).catch(() => []), warrantiesUntil(app.household, today, inDays(60)).catch(() => [])]);
     const items = boxes.reduce((s, b) => s + (b.items?.[0]?.count ?? 0), 0);
 
     if (!boxes.length) {
@@ -70,6 +73,8 @@ export default {
           </div>`;
         }).join('')}
       </section>` : ''}
+      ${warrantyCard(soon)}
+      ${checkCard(boxes)}
       ${taken.length ? `<section class="card taken">
         <div class="card-head"><h3>Gerade entnommen</h3><span class="muted small">${taken.length}</span></div>
         ${taken.map(t => `<div class="taken-row">
@@ -92,6 +97,10 @@ export default {
       if (set.has(id)) set.delete(id); else set.add(id);
       ctx.rerender();
     },
+    startCheck(_, ctx) {
+      startRound(ctx.app.household);
+      ctx.go('scan');
+    },
     async returned(el, ctx) {
       await returnLending(el.dataset.id);
       toast('Zurück erhalten');
@@ -104,3 +113,37 @@ export default {
     }
   }
 };
+
+// Garantie endet in den nächsten 60 Tagen (entnommene Gegenstände nicht)
+function warrantyCard(list) {
+  const rows = list.filter(w => !w.items?.removed_at && (w.boxes || w.items));
+  if (!rows.length) return '';
+  return `<section class="card"><div class="card-head"><h3>Garantie endet bald</h3><span class="muted small">${rows.length}</span></div>
+    ${rows.map(w => `<a class="row-link" href="#/box/${w.box_id ?? w.items.box_id}">
+      <span class="row-ico">${icon('receipt')}</span>
+      <span class="grow"><span class="row-title">${esc(w.boxes?.name ?? w.items.name)}</span>
+        <span class="row-sub">Garantie bis ${dayText(w.warranty_until)}</span></span></a>`).join('')}
+  </section>`;
+}
+
+// Prüfen: Behälter, die am längsten nicht durchgesehen wurden. Orte und Einzelstücke zählen nicht.
+const CHECK_OLD_DAYS = 180;
+function checkCard(boxes) {
+  const list = boxes.filter(b => canHold(b.type) && !isPlace(b.type));
+  if (!list.length) return '';
+  const old = new Date(Date.now() - CHECK_OLD_DAYS * 864e5).toISOString();
+  const due = list.filter(b => !b.checked_at || b.checked_at < old)
+    .sort((a, b) => (a.checked_at ?? '').localeCompare(b.checked_at ?? '') || a.name.localeCompare(b.name, 'de'));
+  const never = list.filter(b => !b.checked_at).length;
+  const sub = !due.length ? 'Alle Behälter im letzten halben Jahr geprüft.'
+    : never === list.length ? 'Noch nichts geprüft. Eine Prüfrunde hält die Liste aktuell.'
+    : `${due.length} Behälter länger als ein halbes Jahr nicht geprüft.`;
+  const showList = due.length && never < list.length;
+  return `<section class="card stack"><div class="card-head"><h3>Prüfen</h3></div>
+    <p class="muted small">${sub}</p>
+    ${showList ? due.slice(0, 3).map(b => `<a class="row-link" href="#/box/${b.id}"><span class="row-ico">${icon(typeIcon(b.type))}</span>
+      <span class="grow"><span class="row-title">${esc(b.name)}</span>
+        <span class="row-sub">${b.checked_at ? `zuletzt am ${fmtDay(b.checked_at)}` : 'noch nie geprüft'}</span></span></a>`).join('') : ''}
+    <button class="btn" data-act="startCheck">${icon('shield')} Prüfrunde starten</button>
+  </section>`;
+}

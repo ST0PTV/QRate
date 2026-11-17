@@ -71,7 +71,7 @@ export async function overview(h) {
 // ---------- Dinge (Kisten, Orte, Einzelstücke) ----------
 // Alle Dinge des Haushalts, flach; Baum und Pfade baut die Oberfläche.
 export const things = h =>
-  run(sb.from('boxes').select('id, name, type, parent_id, items(count)').eq('household_id', h).is('items.removed_at', null).order('name'));
+  run(sb.from('boxes').select('id, name, type, parent_id, checked_at, items(count)').eq('household_id', h).is('items.removed_at', null).order('name'));
 // Ein Ding mit Pfad, darin steckenden Dingen und Gegenständen; null ohne Zugriff
 export const box = id => rpc('get_thing', { p_id: id });
 export const changeType = (id, type) => rpc('change_type', { p_id: id, p_type: type });
@@ -145,6 +145,38 @@ export async function deleteItemPhoto(photo) {
 }
 // Fotospeicher des Haushalts: belegt und Grenze (siehe 0008_storage_limits.sql)
 export const householdStorage = async h => (await rpc('household_storage', { p_household: h }))[0];
+// ---------- Prüfen ----------
+export const checkThing = id => rpc('check_thing', { p_id: id });
+
+// ---------- Kauf und Garantie (ein Eintrag pro Ding oder Gegenstand, Beleg im Bucket unter <haushalt>/receipts/) ----------
+const BUY_COLS = 'id, box_id, item_id, bought_on, price, shop, serial, warranty_until, receipt_path';
+export async function purchasesFor(boxId, itemIds) {
+  const or = [`box_id.eq.${boxId}`];
+  if (itemIds.length) or.push(`item_id.in.(${itemIds.join(',')})`);
+  const rows = await run(sb.from('purchases').select(BUY_COLS).or(or.join(',')));
+  const paths = rows.map(r => r.receipt_path).filter(Boolean);
+  if (!paths.length) return rows;
+  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(paths, 3600));
+  const url = new Map(signed.map(x => [x.path, x.signedUrl]));
+  return rows.map(r => ({ ...r, receipt_url: r.receipt_path ? url.get(r.receipt_path) : null }));
+}
+// target: { box_id } oder { item_id }; fields: bought_on, price, shop, serial, warranty_until, receipt_path
+export const savePurchase = (id, target, fields) => id
+  ? run(sb.from('purchases').update(fields).eq('id', id))
+  : run(sb.from('purchases').insert({ ...target, ...fields }));
+export const deletePurchase = id => run(sb.from('purchases').delete().eq('id', id));
+export async function uploadReceipt(householdId, blob) {
+  const path = `${householdId}/receipts/${crypto.randomUUID()}.jpg`;
+  await run(sb.storage.from(PHOTOS).upload(path, blob, { contentType: 'image/jpeg' }));
+  return path;
+}
+export const dropFile = path => run(sb.storage.from(PHOTOS).remove([path]));
+// Garantie endet zwischen zwei Daten (YYYY-MM-DD), mit Namen von Ding oder Gegenstand
+export const warrantiesUntil = (h, from, until) =>
+  run(sb.from('purchases').select('id, box_id, item_id, warranty_until, boxes(name), items(name, box_id, removed_at)')
+    .eq('household_id', h).gte('warranty_until', from).lte('warranty_until', until).order('warranty_until'));
+// Datei aus dem Bucket laden (für die Sicherung mit Fotos)
+export const downloadFile = path => run(sb.storage.from(PHOTOS).download(path));
 export const moveBox = (id, parentId) => run(sb.from('boxes').update({ parent_id: parentId || null }).eq('id', id));
 
 // ---------- Ausleihen (Personen ohne App-Zugang, nur Name und Telefon) ----------
@@ -165,8 +197,8 @@ export const remindLater = (id, remindAt) => run(sb.from('lendings').update({ re
 
 // ---------- Suche ----------
 // ---------- Sicherung ----------
-// Tabellen, die in die Sicherungsdatei kommen (Fotos nur als Pfad, die Bilder selbst nicht)
-export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'borrowers', 'lendings', 'members'];
+// Tabellen, die in die Sicherungsdatei kommen (Fotos als Pfad; die Bilder legt die ZIP-Sicherung dazu)
+export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'purchases', 'borrowers', 'lendings', 'members'];
 const KEY = t => (t === 'labels' ? 'code' : 'id'); // Sortierung für seitenweises Lesen
 async function allRows(table, h) {
   const out = [];

@@ -40,6 +40,8 @@ const ICONS = {
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
   message: '<path d="M4 5h16v11H9l-5 4z"/>',
   down: '<path d="M6 9l6 6 6-6"/>',
+  receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  shield: '<path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/>',
   // Typen von Dingen
   rack: '<path d="M5 3v18M19 3v18M5 8h14M5 14h14M5 20h14"/>',
   cabinet: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 3v18M10 11v2M14 11v2"/>',
@@ -78,6 +80,7 @@ export function eventText(e) {
     case 'box_created': return 'hat es angelegt';
     case 'box_moved': return d.to ? `hat es nach ${esc(d.to)} gestellt` : 'hat den Ort entfernt';
     case 'box_renamed': return `hat es in „${esc(d.name)}“ umbenannt`;
+    case 'box_checked': return d.items != null ? `hat den Inhalt geprüft (${esc(d.items)} ${d.items === 1 ? 'Eintrag' : 'Einträge'})` : 'hat den Inhalt geprüft';
     case 'box_retyped': return `hat den Typ zu „${esc(typeLabel(d.type))}“ geändert`;
     case 'lent': return d.to ? `hat es an ${esc(d.to)} verliehen` : 'hat es verliehen';
     case 'returned': return d.from ? `hat es von ${esc(d.from)} zurückbekommen` : 'hat es zurückbekommen';
@@ -100,13 +103,14 @@ export function applyTheme(mode) {
 }
 
 // Text als Datei herunterladen (z. B. Sicherung)
-export function downloadText(filename, mime, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+export const downloadText = (filename, mime, text) => downloadBlob(filename, new Blob([text], { type: mime }));
+export function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   document.body.append(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // Meldung unten. Mit action = { label, run } bekommt sie einen Knopf (z. B. „Rückgängig“) und bleibt länger stehen.

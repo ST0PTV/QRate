@@ -1,7 +1,8 @@
-// Scannen in der App (Kamera) oder Nummer eintippen. Zeigt an, wenn gerade etwas verschoben oder eingeräumt wird.
+// Scannen in der App (Kamera) oder Nummer eintippen. Zeigt an, wenn gerade etwas verschoben, eingeräumt oder geprüft wird.
 import { startScanner, stopScanner } from '../core/scanner.js';
 import { store } from '../core/store.js';
 import { esc, icon, toast } from '../core/ui.js';
+import { activeRound } from './check-round.js';
 
 let cameraOn = false;
 let cameraFailed = false;
@@ -18,14 +19,19 @@ export default {
     ctx.setTitle('Scannen', 'Etikett vor die Kamera halten');
     const moving = store.moving();
     const stow = store.stow();
-    // Beim Einräumen läuft die Kamera nach jedem Scan gleich weiter
-    if (stow && !cameraFailed) cameraOn = true;
+    const round = activeRound(ctx);
+    // Beim Einräumen und in der Prüfrunde läuft die Kamera nach jedem Scan gleich weiter
+    if ((stow || round) && !cameraFailed) cameraOn = true;
     return `
       ${stow ? `<div class="banner"><span>Einräumen in „${esc(stow.name)}“: alles scannen, was dorthin kommt.</span>
         <button class="btn small" data-act="stopStow">Fertig</button></div>
         ${stow.done.length ? `<section class="card"><div class="card-head"><h3>Gerade eingeräumt</h3><span class="muted small">${stow.done.length}</span></div>
           ${stow.done.map(d => `<div class="stow-row">${icon('check')}<span class="grow"><strong>${esc(d.name)}</strong>
             <span class="row-sub">${d.from ? `vorher: ${esc(d.from)}` : 'neu angelegt oder ohne Ort'}</span></span></div>`).join('')}</section>` : ''}` : ''}
+      ${round && !stow ? `<div class="banner"><span>Prüfrunde: Behälter scannen, Inhalt ansehen, „Stimmt so“ tippen.</span>
+        <button class="btn small" data-act="stopCheck">Fertig</button></div>
+        ${round.done.length ? `<section class="card"><div class="card-head"><h3>Geprüft</h3><span class="muted small">${round.done.length}</span></div>
+          ${round.done.map(d => `<div class="stow-row">${icon('check')}<a class="grow" href="#/box/${d.id}"><strong>${esc(d.name)}</strong></a></div>`).join('')}</section>` : ''}` : ''}
       ${moving ? `<div class="banner"><span>Jetzt das Ziel scannen. „${esc(moving.name)}“ kommt dorthin.</span>
         <button class="btn small" data-act="cancelMove">Abbrechen</button></div>` : ''}
       <div class="viewfinder${cameraOn ? ' on' : ''}">
@@ -66,6 +72,13 @@ export default {
       cameraOn = false;
       toast(s?.done.length ? `${s.done.length} eingeräumt in „${s.name}“` : 'Einräumen beendet');
       ctx.go(s ? 'box/' + s.id : '');
+    },
+    stopCheck(_, ctx) {
+      const r = store.checkRound();
+      store.setCheckRound(null);
+      cameraOn = false;
+      toast(r?.done.length ? `Prüfrunde beendet: ${r.done.length} geprüft` : 'Prüfrunde beendet');
+      ctx.go('');
     },
     cancelMove(_, ctx) { store.setMoving(null); ctx.rerender(); }
   },

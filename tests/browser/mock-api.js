@@ -137,7 +137,7 @@ export async function codeForNumber(h, kind, number) {
   return (await one('select code from public.labels where household_id = $1 and kind = $2 and number = $3', [h, kind, number]))?.code ?? null;
 }
 
-export const things = h => q(`select b.id, b.name, b.type, b.parent_id,
+export const things = h => q(`select b.id, b.name, b.type, b.parent_id, b.checked_at,
   json_build_array(json_build_object('count', (select count(*)::int from public.items i where i.box_id = b.id and i.removed_at is null))) as items
   from public.boxes b where b.household_id = $1 order by b.name`, [h]);
 
@@ -176,6 +176,7 @@ export const moveBox = (id, parentId) => q('update public.boxes set parent_id = 
 
 // Fotos: Zeilen und Storage-Objekte in PGlite (mit denselben Policies), die Bilddaten nur im Speicher dieser Seite.
 const photoBlobs = new Map();
+const fileBlobs = new Map(); // Pfad → Blob, für die ZIP-Sicherung
 const PHOTO_MISSING = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 3"><rect width="4" height="3" fill="#8E8E93"/></svg>');
 export async function photos(boxId) {
   const rows = await q('select id, path, created_by, created_at from public.box_photos where box_id = $1 order by created_at', [boxId]);
@@ -190,6 +191,7 @@ export async function addPhoto(householdId, boxId, blob) {
     await t.q('insert into public.box_photos (box_id, path) values ($1, $2)', [boxId, path]);
   });
   photoBlobs.set(path, URL.createObjectURL(blob));
+  fileBlobs.set(path, blob);
 }
 export async function deletePhoto(photo) {
   await q('delete from public.box_photos where id = $1', [photo.id]);
@@ -211,6 +213,7 @@ export async function setItemPhoto(householdId, boxId, itemId, blob, cutout) {
     for (const o of old) await t.q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [o.path]);
   });
   photoBlobs.set(path, URL.createObjectURL(blob));
+  fileBlobs.set(path, blob);
 }
 export async function deleteItemPhoto(photo) {
   await q('delete from public.item_photos where id = $1', [photo.id]);
@@ -219,8 +222,50 @@ export async function deleteItemPhoto(photo) {
 
 export const householdStorage = async h => (await q('select * from public.household_storage($1)', [h]))[0];
 
+// Prüfen
+export const checkThing = id => rpc('check_thing', { p_id: id });
+
+// Kauf und Garantie: Datum als YYYY-MM-DD und Preis als Zahl wie bei PostgREST
+const BUY_SQL = `select id, box_id, item_id, to_char(bought_on, 'YYYY-MM-DD') as bought_on, price::float8 as price, shop, serial,
+  to_char(warranty_until, 'YYYY-MM-DD') as warranty_until, receipt_path from public.purchases`;
+export async function purchasesFor(boxId, itemIds) {
+  const rows = await q(`${BUY_SQL} where box_id = $1 or item_id = any($2::uuid[])`, [boxId, itemIds]);
+  const visible = new Set((await q(`select name from storage.objects where bucket_id = 'box-photos'`)).map(r => r.name));
+  return rows.map(r => ({ ...r, receipt_url: r.receipt_path && visible.has(r.receipt_path) ? (photoBlobs.get(r.receipt_path) ?? PHOTO_MISSING) : null }));
+}
+const BUY_FIELDS = ['bought_on', 'price', 'shop', 'serial', 'warranty_until', 'receipt_path'];
+export async function savePurchase(id, target, fields) {
+  const keys = BUY_FIELDS.filter(k => k in fields);
+  if (id) return q(`update public.purchases set ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} where id = $1`, [id, ...keys.map(k => fields[k])]);
+  const t = Object.keys(target)[0];
+  return q(`insert into public.purchases (${[t, ...keys].join(', ')}) values (${[t, ...keys].map((_, i) => '$' + (i + 1)).join(', ')})`,
+    [target[t], ...keys.map(k => fields[k])]);
+}
+export const deletePurchase = id => q('delete from public.purchases where id = $1', [id]);
+export async function uploadReceipt(householdId, blob) {
+  await ready;
+  const path = `${householdId}/receipts/${crypto.randomUUID()}.jpg`;
+  await q(`insert into storage.objects (bucket_id, name, metadata) values ('box-photos', $1, jsonb_build_object('size', $2::bigint))`, [path, blob.size]);
+  photoBlobs.set(path, URL.createObjectURL(blob));
+  fileBlobs.set(path, blob);
+  return path;
+}
+export const dropFile = path => q(`delete from storage.objects where bucket_id = 'box-photos' and name = $1`, [path]);
+export const warrantiesUntil = (h, from, until) => q(`select p.id, p.box_id, p.item_id, to_char(p.warranty_until, 'YYYY-MM-DD') as warranty_until,
+    case when b.id is null then null else json_build_object('name', b.name) end as boxes,
+    case when i.id is null then null else json_build_object('name', i.name, 'box_id', i.box_id, 'removed_at', i.removed_at) end as items
+  from public.purchases p left join public.boxes b on b.id = p.box_id left join public.items i on i.id = p.item_id
+  where p.household_id = $1 and p.warranty_until between $2 and $3 order by p.warranty_until`, [h, from, until]);
+// Ohne Bilddaten (z. B. nach Neuladen) ein kleines graues PNG, damit die ZIP trotzdem entsteht
+const GREY_PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN89+7dfwAJ8wPx2wZ1aQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0));
+export async function downloadFile(path) {
+  const visible = (await q(`select 1 from storage.objects where bucket_id = 'box-photos' and name = $1`, [path])).length;
+  if (!visible) throw new Error('Object not found');
+  return fileBlobs.get(path) ?? new Blob([GREY_PNG], { type: 'image/png' });
+}
+
 // Ausleihen
-export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'borrowers', 'lendings', 'members'];
+export const EXPORT_TABLES = ['labels', 'boxes', 'items', 'events', 'box_photos', 'item_photos', 'purchases', 'borrowers', 'lendings', 'members'];
 const KEY = t => (t === 'labels' ? 'code' : 'id'); // Sortierung für seitenweises Lesen
 export async function exportHousehold(h) {
   const data = {};
