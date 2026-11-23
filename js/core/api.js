@@ -89,12 +89,15 @@ export const renameBox = (id, name) => run(sb.from('boxes').update({ name }).eq(
 
 // ---------- Fotos (privater Bucket box-photos, Pfad <haushalt>/<kiste>/<zufall>.jpg) ----------
 const PHOTOS = 'box-photos';
+// Signierte Adressen gelten eine Stunde; die Ansicht lädt sie bei jedem Öffnen neu. Ergebnis: Pfad → Adresse
+async function signedUrls(paths) {
+  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(paths, 3600));
+  return new Map(signed.map(s => [s.path, s.signedUrl]));
+}
 export async function photos(boxId) {
   const rows = await run(sb.from('box_photos').select('id, path, created_by, created_at').eq('box_id', boxId).order('created_at'));
   if (!rows.length) return [];
-  // Signierte Adressen gelten eine Stunde; die Ansicht lädt sie bei jedem Öffnen neu.
-  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(rows.map(r => r.path), 3600));
-  const url = new Map(signed.map(s => [s.path, s.signedUrl]));
+  const url = await signedUrls(rows.map(r => r.path));
   return rows.map(r => ({ ...r, url: url.get(r.path) }));
 }
 export async function addPhoto(householdId, boxId, blob) {
@@ -115,8 +118,7 @@ export async function deletePhoto(photo) {
 export async function itemPhotos(boxId) {
   const rows = await run(sb.from('item_photos').select('id, item_id, path, cutout, created_by, created_at').eq('box_id', boxId));
   if (!rows.length) return [];
-  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(rows.map(r => r.path), 3600));
-  const url = new Map(signed.map(s => [s.path, s.signedUrl]));
+  const url = await signedUrls(rows.map(r => r.path));
   return rows.map(r => ({ ...r, url: url.get(r.path) }));
 }
 // Ein Foto pro Gegenstand: neues hochladen, altes Eintrag und Datei entfernen, neuen Eintrag anlegen.
@@ -156,8 +158,7 @@ export async function purchasesFor(boxId, itemIds) {
   const rows = await run(sb.from('purchases').select(BUY_COLS).or(or.join(',')));
   const paths = rows.map(r => r.receipt_path).filter(Boolean);
   if (!paths.length) return rows;
-  const signed = await run(sb.storage.from(PHOTOS).createSignedUrls(paths, 3600));
-  const url = new Map(signed.map(x => [x.path, x.signedUrl]));
+  const url = await signedUrls(paths);
   return rows.map(r => ({ ...r, receipt_url: r.receipt_path ? url.get(r.receipt_path) : null }));
 }
 // target: { box_id } oder { item_id }; fields: bought_on, price, shop, serial, warranty_until, receipt_path

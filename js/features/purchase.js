@@ -5,15 +5,20 @@ import { esc, icon, toast } from '../core/ui.js';
 import { errorText } from '../core/errors.js';
 import { shrinkImage } from '../core/photo.js';
 import { reminderIcs, downloadIcs, inDays } from '../core/ics.js';
-import { dayText, parsePrice, plusYears, warrantyState } from '../core/warranty.js';
+import { dayText, parsePrice, priceText, plusYears, warrantyState } from '../core/warranty.js';
 
-export { dayText };
 
 // Geladene Käufe der offenen Ansicht; Schlüssel 'box' oder die ID des Gegenstands
 const buy = { boxId: null, map: null, receipt: null, dropReceipt: false, armed: false };
 
 const euro = n => Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 const keyOf = target => target.box_id ? 'box' : target.item_id;
+const targetOf = el => JSON.parse(el.dataset.target);
+// Neuen Beleg setzen oder verwerfen; die alte Vorschau-Adresse wird freigegeben
+function setReceipt(r) {
+  if (buy.receipt) URL.revokeObjectURL(buy.receipt.url);
+  buy.receipt = r;
+}
 
 export function resetBuy(boxId) {
   if (buy.boxId === boxId) return;
@@ -21,8 +26,7 @@ export function resetBuy(boxId) {
   Object.assign(buy, { boxId, map: null, armed: false });
 }
 function dropPending() {
-  if (buy.receipt) URL.revokeObjectURL(buy.receipt.url);
-  buy.receipt = null;
+  setReceipt(null);
   buy.dropReceipt = false;
 }
 
@@ -34,7 +38,7 @@ export async function fillPurchases(boxId, itemIds) {
   try {
     const list = await api.purchasesFor(boxId, itemIds);
     if (buy.boxId !== boxId) return;
-    buy.map = new Map(list.map(p => [p.box_id ? 'box' : p.item_id, p]));
+    buy.map = new Map(list.map(p => [keyOf(p), p]));
   } catch {
     if (buy.boxId === boxId) buy.map = new Map();
   }
@@ -86,7 +90,7 @@ export function buyHtml(target, name, editing) {
     <div class="field-row">
       <label class="field"><span>Gekauft am</span><input class="input" id="buyDate" type="date" value="${esc(v.bought_on)}"></label>
       <label class="field"><span>Preis in €</span><input class="input" id="buyPrice" inputmode="decimal" autocomplete="off"
-        placeholder="z. B. 249,90" value="${v.price != null ? esc(Number(v.price).toFixed(2).replace('.', ',')) : ''}"></label>
+        placeholder="z. B. 249,90" value="${v.price != null ? esc(priceText(v.price)) : ''}"></label>
     </div>
     <label class="field"><span>Händler</span><input class="input" id="buyShop" maxlength="80" autocomplete="off" value="${esc(v.shop)}"></label>
     <label class="field"><span>Seriennummer</span><input class="input mono" id="buySerial" maxlength="80" autocomplete="off"
@@ -115,7 +119,7 @@ function paintPreview() {
   const form = document.querySelector('form[data-form="buyForm"]');
   const el = document.getElementById('buyReceiptPreview');
   if (!form || !el) return;
-  el.innerHTML = receiptPreviewHtml(purchaseOf(JSON.parse(form.dataset.target)) ?? {});
+  el.innerHTML = receiptPreviewHtml(purchaseOf(targetOf(form)) ?? {});
 }
 
 // Erinnerung einen Monat vor Garantieende, frühestens heute
@@ -131,10 +135,10 @@ function warrantyIcs(p, name) {
 }
 
 // Handler; onDone zeichnet die Ansicht neu (schließt das Formular)
-export function purchaseHandlers({ ctxHousehold, onEdit, onDone }) {
+export function purchaseHandlers({ onEdit, onDone }) {
   return {
     actions: {
-      buyEdit(el, ctx) { dropPending(); buy.armed = false; return onEdit(JSON.parse(el.dataset.target), ctx); },
+      buyEdit(el, ctx) { dropPending(); buy.armed = false; return onEdit(targetOf(el), ctx); },
       buyCancel(_, ctx) { dropPending(); buy.armed = false; return onDone(ctx); },
       buyYears(el) {
         const from = document.getElementById('buyDate')?.value;
@@ -142,23 +146,23 @@ export function purchaseHandlers({ ctxHousehold, onEdit, onDone }) {
         document.getElementById('buyWarranty').value = plusYears(from, Number(el.dataset.years));
       },
       buyDropReceipt() {
-        if (buy.receipt) { URL.revokeObjectURL(buy.receipt.url); buy.receipt = null; }
+        setReceipt(null);
         buy.dropReceipt = true;
         paintPreview();
       },
       buyIcs(el) {
-        const p = purchaseOf(JSON.parse(el.dataset.target));
+        const p = purchaseOf(targetOf(el));
         if (p?.warranty_until) downloadIcs(warrantyIcs(p, el.dataset.name), 'qrate-garantie.ics');
       },
       async buyDelete(el, ctx) {
-        const form = el.closest('form');
-        const p = purchaseOf(JSON.parse(form.dataset.target));
+        const target = targetOf(el.closest('form'));
+        const p = purchaseOf(target);
         if (!p) return;
         if (!buy.armed) { buy.armed = true; el.classList.add('danger'); el.textContent = 'Wirklich löschen?'; return; }
         buy.armed = false;
         await api.deletePurchase(p.id);
         if (p.receipt_path) await api.dropFile(p.receipt_path).catch(() => {});
-        buy.map.delete(keyOf(JSON.parse(form.dataset.target)));
+        buy.map.delete(keyOf(target));
         dropPending();
         toast('Kaufdaten gelöscht');
         await onDone(ctx);
@@ -170,8 +174,7 @@ export function purchaseHandlers({ ctxHousehold, onEdit, onDone }) {
         if (!f) return;
         try {
           const blob = await shrinkImage(f, 1600, 0.75);
-          if (buy.receipt) URL.revokeObjectURL(buy.receipt.url);
-          buy.receipt = { blob, url: URL.createObjectURL(blob) };
+          setReceipt({ blob, url: URL.createObjectURL(blob) });
           buy.dropReceipt = false;
           paintPreview();
         } catch (e) {
@@ -181,7 +184,7 @@ export function purchaseHandlers({ ctxHousehold, onEdit, onDone }) {
     },
     forms: {
       async buyForm(f, ctx) {
-        const target = JSON.parse(f.dataset.target);
+        const target = targetOf(f);
         const old = purchaseOf(target);
         const price = parsePrice(f.querySelector('#buyPrice').value);
         if (Number.isNaN(price)) { toast('Preis bitte als Zahl, z. B. 249,90', 'error'); return; }
@@ -204,7 +207,7 @@ export function purchaseHandlers({ ctxHousehold, onEdit, onDone }) {
         let newPath = null;
         if (buy.receipt) {
           toast('Beleg wird hochgeladen …');
-          newPath = await api.uploadReceipt(ctxHousehold(ctx), buy.receipt.blob);
+          newPath = await api.uploadReceipt(ctx.app.household, buy.receipt.blob);
         }
         fields.receipt_path = newPath ?? (keepReceipt ? old.receipt_path : null);
         try {

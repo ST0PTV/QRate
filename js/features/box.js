@@ -7,9 +7,10 @@ import { esc, icon, fmtDay, fmtTime, eventText, toast } from '../core/ui.js';
 import { errorText } from '../core/errors.js';
 import { shrinkImage, shrinkCutout, clipboardImage } from '../core/photo.js';
 import { reminderIcs, downloadIcs, inDays } from '../core/ics.js';
-import { TYPES, GROUPS, typeLabel, typeIcon, groupOf, canHold, isPlace, buildTree } from '../core/types.js';
+import { TYPES, GROUPS, typeLabel, typeIcon, canHold, isPlace, buildTree } from '../core/types.js';
 import { buyHtml, buyBadgeHtml, resetBuy, fillPurchases, buyLoaded, purchaseOf, purchaseHandlers } from './purchase.js';
 import { activeRound } from './check-round.js';
+import { dayText } from '../core/warranty.js';
 
 // Zustand der geöffneten Kiste (Panels, nachgeladene Listen)
 const st = { boxId: null, code: null, panel: null, things: null, removed: null, photos: null, photoSel: 0, photoArmed: null,
@@ -121,7 +122,7 @@ const childRow = c => {
   </a>`;
 };
 
-function boxHtml(p, { cachedAt } = {}) {
+function boxHtml(p, { cachedAt, round } = {}) {
   const b = p.box;
   const holds = canHold(b.type);
   const children = p.children ?? [];
@@ -143,7 +144,7 @@ function boxHtml(p, { cachedAt } = {}) {
       ${toolBtn('type', 'Typ', typeIcon(b.type))}
       ${holds ? `<button class="tool" data-act="stow">${icon('scan')}<span>Einräumen</span></button>` : ''}
     </div>
-    ${holds && !isPlace(b.type) ? checkBarHtml(b, ctxRef) : ''}
+    ${holds && !isPlace(b.type) ? checkBarHtml(b, round) : ''}
     ${panelHtml(b)}
     <section class="card stack" id="buy">${buyCardHtml(b)}</section>
     ${isPlace(b.type) ? '' : `<section class="card stack" id="lending">${lendHtml()}</section>`}
@@ -168,8 +169,7 @@ function boxHtml(p, { cachedAt } = {}) {
 
 // ---------- Prüfen: „Stimmt so“ merkt sich Zeit und Person; in der Prüfrunde geht es danach zurück zum Scannen ----------
 
-function checkBarHtml(b, ctx) {
-  const round = activeRound(ctx);
+function checkBarHtml(b, round) {
   return `${round ? `<div class="banner"><span>Prüfrunde: Inhalt ansehen, dann „Stimmt so“ tippen.</span>
       <a class="btn small" href="#/scan">Zum Scannen</a></div>` : ''}
     <div class="check-bar">
@@ -188,7 +188,7 @@ const checkActions = {
     if (round) {
       round.done = [{ id: b.id, name: b.name }, ...round.done.filter(d => d.id !== b.id)];
       store.setCheckRound(round);
-      if (st.code) store.cache(st.code, null);
+      dropCache();
       toast(`„${b.name}“ geprüft`);
       ctx.go('scan');
       return;
@@ -200,7 +200,6 @@ const checkActions = {
 
 // Kaufdaten: Formular öffnen und schließen über das Panel der Ansicht
 const buyHandlers = purchaseHandlers({
-  ctxHousehold: ctx => ctx.app.household,
   async onEdit(target, ctx) {
     const edit = document.querySelector('form[data-form="saveItem"]');
     if (edit && [...edit.querySelectorAll('input')].some(i => i.value !== i.defaultValue)) {
@@ -220,7 +219,7 @@ const buyHandlers = purchaseHandlers({
 
 // Karte für Kaufdaten: bei Einzelstücken immer, sonst nur, wenn schon ein Kauf am Ding hängt (z. B. nach Typwechsel)
 function buyCardHtml(b) {
-  const show = groupOf(b.type) === 'single' || purchaseOf({ box_id: b.id }) || st.panel === 'buy:box';
+  const show = !canHold(b.type) || purchaseOf({ box_id: b.id }) || st.panel === 'buy:box';
   return show ? buyHtml({ box_id: b.id }, b.name, st.panel === 'buy:box') : '';
 }
 
@@ -541,8 +540,9 @@ async function fillEvents(ctx, boxId) {
   }
 }
 
+const dropCache = () => { if (st.code) store.cache(st.code, null); };
 async function afterChange(ctx) {
-  if (st.code) store.cache(st.code, null);
+  dropCache();
   if (st.removed) st.removed = null;
   await ctx.rerender();
 }
@@ -550,7 +550,6 @@ async function afterChange(ctx) {
 // ---------- Ausleihen (Personen ohne App-Zugang; Erinnerung auf der Übersicht und als Kalendereintrag) ----------
 
 const lendState = { boxId: null, list: null, people: null, armedReturn: false };
-const dayText = s => (s ? s.split('-').reverse().join('.') : '');
 const openLending = () => lendState.list?.find(l => !l.returned_at) ?? null;
 
 function lendIcsFor(l, thingName) {
@@ -777,9 +776,7 @@ const boxInput = {
   }
 };
 
-let ctxRef = null; // für Darstellungen, die den Haushalt brauchen (Prüfrunde)
 function showBox(ctx, p, opts) {
-  ctxRef = ctx;
   resetFor(p.box.id);
   st.current = { ...p.box, items: p.items };
   st.childCount = p.children?.length ?? 0;
@@ -787,7 +784,7 @@ function showBox(ctx, p, opts) {
   // Was etwas aufnehmen kann, wird beim nächsten Anlegen als Ort vorgeschlagen
   if (canHold(p.box.type)) store.setLastPlace({ id: p.box.id, name: p.box.name });
   ctx.setTitle(typeLabel(p.box.type), ctx.app.membership.households?.name ?? '', true);
-  return boxHtml(p, opts);
+  return boxHtml(p, { ...opts, round: activeRound(ctx) });
 }
 
 // Nach dem Zeichnen: Gegenstandsfotos laden oder vorhandene einsetzen, Einfügen-Feld verdrahten
@@ -809,6 +806,15 @@ async function finishMove(ctx, target) {
 }
 
 // ---------- Seiten ----------
+
+// Gemeinsame Handler für beide Wege zum Ding (Scan und Liste)
+const boxHandlers = {
+  leave() { resetBuy(null); },
+  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions, ...checkActions, ...buyHandlers.actions },
+  forms: { ...boxForms, ...buyHandlers.forms },
+  input: boxInput,
+  change: { ...photoChange, ...picChange, ...buyHandlers.change }
+};
 
 export const resolveView = {
   id: 'box',
@@ -842,16 +848,12 @@ export const resolveView = {
     store.cache(code, p);
     return showBox(ctx, p);
   },
-  leave() { resetBuy(null); },
   mounted(ctx) {
     picCtx = ctx; // auch Einfügen ins Feld ohne vorherigen Knopf speichert
     if (st.current && document.getElementById('events')) fillEvents(ctx, st.current.id);
     if (st.current && document.getElementById('photos')) { fillPhotos(st.current.id); afterPaint(); fillLending(ctx, st.current.id); }
   },
-  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions, ...checkActions, ...buyHandlers.actions },
-  forms: { ...boxForms, ...buyHandlers.forms },
-  input: boxInput,
-  change: { ...photoChange, ...picChange, ...buyHandlers.change }
+  ...boxHandlers
 };
 
 export const boxView = {
@@ -864,12 +866,8 @@ export const boxView = {
     st.code = p.box.code;
     return showBox(ctx, p);
   },
-  leave() { resetBuy(null); },
   mounted(ctx, id) { picCtx = ctx; fillEvents(ctx, id); fillPhotos(id); afterPaint(); fillLending(ctx, id); },
-  actions: { ...boxActions, ...photoActions, ...picActions, ...lendActions, ...checkActions, ...buyHandlers.actions },
-  forms: { ...boxForms, ...buyHandlers.forms },
-  input: boxInput,
-  change: { ...photoChange, ...picChange, ...buyHandlers.change }
+  ...boxHandlers
 };
 
 // ---------- Etikett zuordnen ----------

@@ -2,6 +2,8 @@
 import { inDays } from './ics.js';
 
 export const dayText = s => (s ? s.split('-').reverse().join('.') : '');
+// Zahl → „1299,90“; leer → ''
+export const priceText = n => (n == null ? '' : Number(n).toFixed(2).replace('.', ','));
 
 // „1.299,90 €“, „1299.9“ oder „12“ → Zahl; leer → null; Unsinn → NaN
 export function parsePrice(v) {
