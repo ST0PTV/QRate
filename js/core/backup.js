@@ -1,6 +1,7 @@
 // Sicherung: JSON mit allen Tabellen, dazu für die ZIP eine Inventarliste (CSV für Tabellenprogramme) und die Fotos.
 import { buildTree, typeLabel } from './types.js';
 import { makeZip } from './zip.js';
+import { dayText, priceText } from './warranty.js';
 
 export const SCHEMA_VERSION = 9;
 
@@ -23,13 +24,8 @@ function cell(v) {
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[";\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
-const price = n => (n == null ? '' : Number(n).toFixed(2).replace('.', ','));
 // Datum als TT.MM.JJJJ; kommt als Text (Supabase) oder als Date-Objekt (Testdatenbank)
-const day = v => {
-  if (!v) return '';
-  const iso = v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
-  return iso.split('-').reverse().join('.');
-};
+const day = v => dayText(v instanceof Date ? v.toISOString().slice(0, 10) : v ? String(v).slice(0, 10) : '');
 
 // Eine Zeile pro Ding und pro Gegenstand (ohne entnommene), mit Ort, Kaufdaten und Beleg-Datei
 export function inventoryCsv(data) {
@@ -37,17 +33,24 @@ export function inventoryCsv(data) {
   const tree = buildTree(boxes);
   const byBox = new Map((data.purchases ?? []).filter(p => p.box_id).map(p => [p.box_id, p]));
   const byItem = new Map((data.purchases ?? []).filter(p => p.item_id).map(p => [p.item_id, p]));
-  const boxName = new Map(boxes.map(b => [b.id, b.name]));
+  // Gegenstände einmal nach Ding gruppieren statt pro Ding alle durchsuchen
+  const itemsBy = new Map();
+  for (const i of data.items ?? []) {
+    if (i.removed_at) continue;
+    if (!itemsBy.has(i.box_id)) itemsBy.set(i.box_id, []);
+    itemsBy.get(i.box_id).push(i);
+  }
   const head = ['Ort', 'Ding', 'Typ', 'Gegenstand', 'Menge', 'Notiz', 'Gekauft am', 'Preis (EUR)', 'Händler', 'Seriennummer', 'Garantie bis', 'Beleg'];
-  const buy = p => p ? [day(p.bought_on), price(p.price), p.shop, p.serial, day(p.warranty_until), p.receipt_path ? 'fotos/' + p.receipt_path : '']
+  const buy = p => p ? [day(p.bought_on), priceText(p.price), p.shop, p.serial, day(p.warranty_until), p.receipt_path ? 'fotos/' + p.receipt_path : '']
     : ['', '', '', '', '', ''];
   const rows = [];
-  const sorted = [...boxes].sort((a, b) => `${tree.path(a.id)} ${a.name}`.localeCompare(`${tree.path(b.id)} ${b.name}`, 'de'));
-  for (const b of sorted) {
-    rows.push([tree.path(b.id), b.name, typeLabel(b.type), '', '', b.note, ...buy(byBox.get(b.id))]);
-    for (const i of (data.items ?? []).filter(x => x.box_id === b.id && !x.removed_at)) {
-      rows.push([tree.path(b.id), boxName.get(b.id), typeLabel(b.type), i.name, i.qty, i.note, ...buy(byItem.get(i.id))]);
-    }
+  // Pfad je Ding nur einmal berechnen, nicht in jedem Vergleich
+  const sorted = boxes.map(b => ({ b, path: tree.path(b.id) }))
+    .sort((x, y) => `${x.path} ${x.b.name}`.localeCompare(`${y.path} ${y.b.name}`, 'de'));
+  for (const { b, path } of sorted) {
+    const type = typeLabel(b.type);
+    rows.push([path, b.name, type, '', '', b.note, ...buy(byBox.get(b.id))]);
+    for (const i of itemsBy.get(b.id) ?? []) rows.push([path, b.name, type, i.name, i.qty, i.note, ...buy(byItem.get(i.id))]);
   }
   return '﻿' + [head, ...rows].map(r => r.map(cell).join(';')).join('\r\n') + '\r\n';
 }
@@ -59,15 +62,19 @@ export async function backupZip(data, householdName, load, onProgress = () => {}
     { name: 'inventar.csv', data: inventoryCsv(data) }
   ];
   const paths = filePaths(data);
-  const missing = [];
-  for (const [i, path] of paths.entries()) {
-    onProgress(i + 1, paths.length);
-    try {
-      files.push({ name: 'fotos/' + path, data: await load(path) });
-    } catch {
-      missing.push(path);
+  // Vier Downloads gleichzeitig; Reihenfolge der Dateien bleibt wie in paths
+  const blobs = new Array(paths.length);
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < paths.length) {
+      const i = next++;
+      try { blobs[i] = await load(paths[i]); } catch { blobs[i] = null; }
+      onProgress(++done, paths.length);
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, paths.length) }, worker));
+  const missing = [];
+  paths.forEach((path, i) => (blobs[i] ? files.push({ name: 'fotos/' + path, data: blobs[i] }) : missing.push(path)));
   if (missing.length) files.push({ name: 'fehlende-fotos.txt', data: missing.join('\r\n') + '\r\n' });
   return { blob: await makeZip(files), photos: paths.length - missing.length, missing: missing.length };
 }
